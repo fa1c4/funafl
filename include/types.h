@@ -35,6 +35,9 @@ typedef unsigned __int128 uint128_t;
 typedef uint128_t         u128;
 #endif
 
+/* FunAFL type define */
+typedef double d64;
+
 /* Extended forkserver option values */
 
 /* Reporting errors */

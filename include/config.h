@@ -561,5 +561,29 @@
 
 #define AFL_TXT_STRING_MAX_MUTATIONS 6
 
+
+/* FunAFL configuration */
+#define FUNC_COUNT 65536
+#define TYPE_POS_PAIR 1
+#define TYPE_BOUNDARY 2
+#define LIST_HOLDER "LIST_HEAD"
+// FunAFL attributes number is 7
+#define ATTRIBUTES_NUMBER 7
+#define TIME_DIFF 8 * 60 * 1000
+#define DURATION 50 * 1000
+#define JSON_READ_RETRY 6
+#define RATIO_SEED_SELECT 0.8
+#define SEED 1
+#define ENERGY 1
+#define TRACE1 1
+#define TRACE2 1
+#define WL_SUBGRAPH 1
+#define TRACE_KEEP 10.0
+#define TRACE_START1 1.2
+#define TRACE_START2 2
+#define ENERGY_START_TIME 5
+#define NOT_HIT 100
+#define METHOD_CHANGE_TIMES 5
+
 #endif                                                  /* ! _HAVE_CONFIG_H */
 
