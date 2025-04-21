@@ -12,13 +12,20 @@ Repository:
 ## Building and installing AFL++
 
 prepare the environment and build the fuzzer 
+
+> dependencies: llvm-15 clang-15
+
 ```shell
 # install dependencies before compile the FunAFL
-./dependencies_install.sh -alt
+./dependencies_install.sh --install
+./dependencies_install.sh --alt
 
 # compile fuzzer
 make clean
 time make -j source-only
+# afl-fuzz and supporting tools 
+# LLVM basic mode, LLVM mode, LLVM LTO mode, gcc_mode should be built successfully
+# and ignore Nyx build error
 ```
 
 ## Static analysis

@@ -123,6 +123,7 @@
 
 #undef LIST_FOREACH                                 /* clashes with FreeBSD */
 #include "list.h"
+
 #ifndef SIMPLE_FILES
   #define CASE_PREFIX "id:"
 #else
@@ -256,6 +257,15 @@ struct queue_entry {
   u8                 *cmplog_colorinput; /* the result buf of colorization   */
   struct tainted     *taint;             /* Taint information from CmpLog    */
   struct skipdet_entry *skipdet_e;
+
+  /* funafl variabels */
+  d64 seed_score;                     /* score of function attributes     */
+  d64 energy_score;                   /* score of function attributes for energy    */
+
+  u32 function_trace_hash;
+
+  struct queue_entry *next,           /* Next element, if any             */
+                     *next_100;       /* 100 elements ahead               */
 
 };
 
@@ -866,6 +876,37 @@ typedef struct afl_state {
   FILE *introspection_file;
   u32   bitsmap_size;
 #endif
+
+  /* FunAFL global avariables */
+  struct loc2bbs* record_loc2bbs;
+  struct basic_block_count* bb2count;
+  struct basic_blocks* bb2attributes;
+
+  int trace_bits_index_when_new_path_is_added;
+  int count_new_tracebit_index;
+  int new_tracebit_index[65536];
+
+  double average_score;
+  double sum_score;
+  int number_score;
+
+  double average_score_energy;
+  double sum_score_energy;
+  int number_score_energy;
+  d64 max_score;
+  d64 min_score;
+
+  u32 global_function_trace[65536];
+  u32 global_function_trace_count;
+  u32 global_function_trace_sum;
+  d64 average_function_trace;
+  d64 max_function_trace;
+  int energy_times;
+
+  int method_change;
+  int not_found_new_hit;
+  int not_found_base;
+  int read_success;
 
 } afl_state_t;
 

@@ -1,4 +1,5 @@
-#include "read_json.h"
+#include "afl-fuzz-json.h"
+#include "afl-fuzz.h"
 
 
 int double_is_equal(double d1, double d2) {
@@ -36,9 +37,9 @@ double get_score_for_each_array(double attributes[]) {
 }
 
 
-void add_bb_count_key(int bb_random_val) {
+void add_bb_count_key(struct afl_state* afl, int bb_random_val) {
     struct basic_block_count *bbc = NULL;
-    HASH_FIND_INT(bb2count, &bb_random_val, bbc);
+    HASH_FIND_INT(afl->bb2count, &bb_random_val, bbc);
     
     // if bbc not found in bb2count, create a new one
     if (bbc == NULL) {
@@ -46,12 +47,12 @@ void add_bb_count_key(int bb_random_val) {
         bbc->bb_random = bb_random_val;
         bbc->count = 0;
         // add bbc->bb_random as key bbc as value to bb2count hashtable
-        HASH_ADD_INT(bb2count, bb_random, bbc);
+        HASH_ADD_INT(afl->bb2count, bb_random, bbc);
     }
 }
 
 
-void parse_content(char *content, int parse_mode) {
+void parse_content(struct afl_state* afl, char *content, int parse_mode) {
     /*
     * parse_mode = 0: parse bb2attributes
     * parse_mode = 1: parse bb2attributes_not_first
@@ -76,22 +77,22 @@ void parse_content(char *content, int parse_mode) {
 
         if (parse_mode == 2) { // parsing loc2bbs
             // find loc in record_loc2bbs hashtable and store result in l2b
-            HASH_FIND_INT(record_loc2bbs, &loc, l2b);
+            HASH_FIND_INT(afl->record_loc2bbs, &loc, l2b);
             if (l2b == NULL) {
                 l2b = (struct loc2bbs*)malloc(sizeof(struct loc2bbs));
                 l2b->loc = loc;
                 l2b->length = 0;
                 // [?] add l2b->loc as key l2b as value to record_loc2bbs hashtable
-                HASH_ADD_INT(record_loc2bbs, loc, l2b);
+                HASH_ADD_INT(afl->record_loc2bbs, loc, l2b);
             }
         } else { // parsing bb2attributes
-            HASH_FIND_INT(bbs2attributes, &loc, bb);
+            HASH_FIND_INT(afl->bb2attributes, &loc, bb);
             if (bb == NULL) {
                 if (parse_mode == 0) {
                     bb = (struct basic_blocks*)malloc(sizeof(struct basic_blocks));
                     bb->bb_random = loc;
-                    HASH_ADD_INT(bbs2attributes, bb_random, bb);
-                    add_bb_count_key(loc);
+                    HASH_ADD_INT(afl->bb2attributes, bb_random, bb);
+                    add_bb_count_key(afl, loc);
                 } else if (parse_mode == 1) {
                     ACTF("[-] Read twice but bbs not found: %d\n", loc);
                     exit(-1);
@@ -173,7 +174,7 @@ void parse_content(char *content, int parse_mode) {
 }
 
 
-void read_bb2attributes(char *base_name) {
+void read_bb2attributes(struct afl_state* afl, char *base_name) {
     struct basic_blocks *bb = NULL;
     u8 *input_name = alloc_printf("%s_bb2attributes.json", base_name);
 
@@ -190,13 +191,13 @@ void read_bb2attributes(char *base_name) {
         FATAL("<read_bb2attributes> Failed to read bb2attributes data from %s", input_name);
     }
 
-    parse_content(content, 0);
+    parse_content(afl, content, 0);
     ck_free(input_name);
     ck_free(content);
 }
 
 
-void read_bb2attributes_not_first(u8 *base_name, u8 *fuzz_out) {
+void read_bb2attributes_not_first(struct afl_state* afl, u8 *base_name, u8 *fuzz_out) {
     struct basic_blocks *bb = NULL;
     char *last_slash = strchr(base_name, '/');
     char *bin_name = last_slash? (char*)(last_slash + 1): (char*)base_name;
@@ -213,13 +214,13 @@ void read_bb2attributes_not_first(u8 *base_name, u8 *fuzz_out) {
         FATAL("<read_bb2attributes_not_first> Failed to read bb2attributes data from %s", input_name);
     }
 
-    parse_content(content, 1);
+    parse_content(afl, content, 1);
     ck_free(input_name);
     ck_free(content);
 }
 
 
-void read_loc2bbs(char *bin_name) {
+void read_loc2bbs(struct afl_state* afl, char *bin_name) {
     u8 *input_name = alloc_printf("%s_loc2addrs.json", bin_name);
     struct loc2bbs *loc2bbs_data = NULL; // <!> unused *loc2bbs
     
@@ -236,7 +237,7 @@ void read_loc2bbs(char *bin_name) {
         FATAL("<read_loc2bbs> Failed to read loc2bbs data from %s", input_name);
     }
 
-    parse_content(content, 2);
+    parse_content(afl, content, 2);
     ck_free(content);
     ck_free(input_name);
 }
@@ -304,7 +305,7 @@ void print_bb2attributes_not_first(struct basic_blocks *bbs) {
 }
 
 
-void write_bb_count(u8 *base_name) {
+void write_bb_count(struct afl_state* afl, u8 *base_name) {
     u8 *output_name = alloc_printf("%s/bb_count.txt", base_name);
     FILE *fp = fopen(output_name, "w");
     if (fp == NULL) {
@@ -312,7 +313,7 @@ void write_bb_count(u8 *base_name) {
         return;
     }
 
-    struct basic_block_count *bbc = bb2count;
+    struct basic_block_count *bbc = afl->bb2count;
     for (; bbc != NULL; bbc = (struct basic_block_count*)(bbc->hh.next)) {
         fprintf(fp, "%d: %d\n", bbc->bb_random, bbc->count);
     }
@@ -322,9 +323,9 @@ void write_bb_count(u8 *base_name) {
 }
 
 
-void add_bb_count(int bb) {
+void add_bb_count(struct afl_state* afl, int bb) {
     struct basic_block_count *bbc = NULL;
-    HASH_FIND_INT(bb2count, &bb, bbc);
+    HASH_FIND_INT(afl->bb2count, &bb, bbc);
     if (bbc == NULL) {
         ACTF("<add_bb_count> bb not found in bb2count: %d\n", bb);
         exit(-5);
@@ -339,16 +340,16 @@ void add_bb_count(int bb) {
 }
 
 
-struct score_union *get_score_by_bb(int bb) {
+struct score_union *get_score_by_bb(struct afl_state* afl, int bb) {
     struct basic_blocks *cur_bb = NULL;
     // find bb in bbs2attributes hashtable and store result in cur_bb
-    HASH_FIND_INT(bbs2attributes, &bb, cur_bb);
+    HASH_FIND_INT(afl->bb2attributes, &bb, cur_bb);
     if (cur_bb == NULL) {
         ACTF("<get_score_by_bb> bb not found in bbs2attributes: %d\n", bb);
         return NULL;
     }
 
-    add_bb_count(bb);
+    add_bb_count(afl, bb);
     struct score_union *sc = (struct score_union*)malloc(sizeof(struct score_union));
     sc->seed_score = cur_bb? cur_bb->score_seed: 0.0;
     sc->energy_score = cur_bb?  cur_bb->score_energy: 0.0;
@@ -357,7 +358,9 @@ struct score_union *get_score_by_bb(int bb) {
 }
 
 
-struct score_union* get_score_with_loc_and_update_function_count(int new_tracebit_index[], int count_new_tracebit_index) {
+struct score_union* get_score_with_loc_and_update_function_count(struct afl_state* afl, 
+    int new_tracebit_index[], int count_new_tracebit_index) {
+    
     double score_seed = 0.0, score_energy = 0.0;
     struct score_union *score_record = NULL;
     int bb_num = 0, bb_num_energy = 0;
@@ -365,13 +368,13 @@ struct score_union* get_score_with_loc_and_update_function_count(int new_tracebi
     for (int i = 0; i < count_new_tracebit_index; ++i) {
         int loc = new_tracebit_index[i];
         struct loc2bbs *tmp_loc2bbs = NULL;
-        HASH_FIND_INT(record_loc2bbs, &loc, tmp_loc2bbs);
+        HASH_FIND_INT(afl->record_loc2bbs, &loc, tmp_loc2bbs);
         if (tmp_loc2bbs == NULL) 
             continue;
 
         for (int j = 0; j < tmp_loc2bbs->length; ++j) {
             int bb_cal = tmp_loc2bbs->bbs[j];
-            score_record = get_score_by_bb(bb_cal);
+            score_record = get_score_by_bb(afl, bb_cal);
 
             if (score_record != NULL) {
                 score_seed += score_record->seed_score;
@@ -391,35 +394,35 @@ struct score_union* get_score_with_loc_and_update_function_count(int new_tracebi
     // update score
     struct score_union *result = (struct score_union*)malloc(sizeof(struct score_union));
     result->seed_score = bb_num == 0? 
-                            average_score: 
+                            afl->average_score: 
                             score_seed / (double)bb_num;
     result->energy_score = bb_num_energy == 0? 
-                            average_score_energy: 
+                            afl->average_score_energy: 
                             score_energy / (double)bb_num_energy;
 
     // (!) maybe uninitialized before used
-    ++number_score;
-    if (number_score > 2147483600) {
+    ++afl->number_score;
+    if (afl->number_score > 2147483600) {
         ACTF("<get_score_with_loc_and_update_function_count> number_score overflow\n");
         exit(-3);
     }
     // (!) maybe uninitialized before used
-    sum_score += result->seed_score;
-    average_score = sum_score / number_score;
+    afl->sum_score += result->seed_score;
+    afl->average_score = afl->sum_score / afl->number_score;
 
     // (!) maybe uninitialized before used
-    ++number_score_energy;
-    if (number_score_energy > 2147483600) {
+    ++afl->number_score_energy;
+    if (afl->number_score_energy > 2147483600) {
         ACTF("<get_score_with_loc_and_update_function_count> number_score_energy overflow\n");
         exit(-4);
     }
     // (!) maybe uninitialized before used
-    sum_score_energy += result->energy_score;
-    average_score_energy = sum_score_energy / number_score_energy;
+    afl->sum_score_energy += result->energy_score;
+    afl->average_score_energy = afl->sum_score_energy / afl->number_score_energy;
 
     // update min and max score
-    if (result->energy_score < min_score) min_score = result->energy_score;
-    if (result->energy_score > max_score) max_score = result->energy_score; 
+    if (result->energy_score < afl->min_score) afl->min_score = result->energy_score;
+    if (result->energy_score > afl->max_score) afl->max_score = result->energy_score; 
 
     return result;
 }

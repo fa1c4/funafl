@@ -29,6 +29,10 @@
 #include "cmplog.h"
 #include "asanfuzz.h"
 #include "common.h"
+
+#include "afl-fuzz-json.h" /* afl-fuzz-json include list.h */
+#include "afl-fuzz-fun.h" /* FunAFL header*/
+
 #include <limits.h>
 #include <stdlib.h>
 #ifndef USEMMAP
@@ -593,6 +597,17 @@ int main(int argc, char **argv_orig, char **envp) {
 
   afl_state_t *afl = calloc(1, sizeof(afl_state_t));
   if (!afl) { FATAL("Could not create afl state"); }
+
+  /* funafl code */
+  // initialize all funafl global variables
+  long last_modify_t = 0, modify_t = 0;
+  s32 fd;
+  struct stat buf;
+  FILE* new_fp = NULL;
+
+  afl->max_function_trace = 0;
+  memset(afl->global_function_trace, 0, sizeof(afl->global_function_trace));
+  /* end of funafl code */
 
   if (get_afl_env("AFL_DEBUG")) { debug = afl->debug = 1; }
 
@@ -2256,6 +2271,11 @@ int main(int argc, char **argv_orig, char **envp) {
 
   check_binary(afl, argv[optind]);
 
+  /* funafl code */
+  read_loc2bbs(afl, argv[optind]);
+  read_bb2attributes(afl, argv[optind]);
+  /* end of funafl code */
+
   u64 prev_target_hash = 0;
   s32 fast_resume = 0;
   #ifdef HAVE_ZLIB
@@ -2528,6 +2548,8 @@ int main(int argc, char **argv_orig, char **envp) {
   afl->argv = use_argv;
   afl->fsrv.trace_bits =
       afl_shm_init(&afl->shm, afl->fsrv.map_size, afl->non_instrumented_mode);
+  /* funafl init function_index */
+  afl->fsrv.function_index = (u32*)(afl->fsrv.trace_bits + afl->fsrv.map_size);
 
   if (!afl->non_instrumented_mode && !afl->fsrv.qemu_mode &&
       !afl->unicorn_mode && !afl->fsrv.frida_mode && !afl->fsrv.cs_mode &&
@@ -2580,6 +2602,9 @@ int main(int argc, char **argv_orig, char **envp) {
       afl->fsrv.map_size = new_map_size;
       afl->fsrv.trace_bits =
           afl_shm_init(&afl->shm, new_map_size, afl->non_instrumented_mode);
+      /* funafl init function_index */
+      afl->fsrv.function_index = (u32*)(afl->fsrv.trace_bits + afl->fsrv.map_size);
+
       setenv("AFL_NO_AUTODICT", "1", 1);  // loaded already
       afl_fsrv_start(&afl->fsrv, afl->argv, &afl->stop_soon,
                      afl->afl_env.afl_debug_child);
@@ -2693,6 +2718,9 @@ int main(int argc, char **argv_orig, char **envp) {
         setenv("AFL_NO_AUTODICT", "1", 1);  // loaded already
         afl->fsrv.trace_bits =
             afl_shm_init(&afl->shm, new_map_size, afl->non_instrumented_mode);
+        /* funafl init function_index */
+        afl->fsrv.function_index = (u32*)(afl->fsrv.trace_bits + afl->fsrv.map_size);
+  
         ck_free(afl->san_fsrvs[i].trace_bits);
         afl->san_fsrvs[i].trace_bits = ck_alloc(afl->fsrv.map_size + 8);
         afl->san_fsrvs[i].map_size = afl->fsrv.map_size;
@@ -2783,6 +2811,9 @@ int main(int argc, char **argv_orig, char **envp) {
       setenv("AFL_NO_AUTODICT", "1", 1);  // loaded already
       afl->fsrv.trace_bits =
           afl_shm_init(&afl->shm, new_map_size, afl->non_instrumented_mode);
+      /* funafl init function_index */
+      afl->fsrv.function_index = (u32*)(afl->fsrv.trace_bits + afl->fsrv.map_size);
+
       afl->cmplog_fsrv.trace_bits = afl->fsrv.trace_bits;
       afl_fsrv_start(&afl->fsrv, afl->argv, &afl->stop_soon,
                      afl->afl_env.afl_debug_child);
@@ -3032,6 +3063,10 @@ int main(int argc, char **argv_orig, char **envp) {
   afl->start_time = get_cur_time();
 
   while (likely(!afl->stop_soon)) {
+
+    /* funafl read json */
+
+    /* end of funafl read json */
 
     cull_queue(afl);
 

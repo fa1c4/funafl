@@ -1,5 +1,8 @@
 # files to ignore for FunAFL repo
 
+# environment files
+.vscode/
+
 # build results
 SanitizerCoverageLTO.so
 SanitizerCoveragePCGUARD.so
@@ -48,7 +51,6 @@ cmplog-instructions-pass.so
 cmplog-routines-pass.so
 cmplog-switches-pass.so
 compare-transform-pass.so
-dependencies_install.sh
 injection-pass.so
 instrumentation/afl-common.o
 instrumentation/afl-llvm-common.o

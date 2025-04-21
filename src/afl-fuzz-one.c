@@ -24,6 +24,7 @@
  */
 
 #include "afl-fuzz.h"
+#include "afl-fuzz-fun.h"
 #include <string.h>
 #include <limits.h>
 #include "cmplog.h"
@@ -443,8 +444,10 @@ u8 fuzz_one_original(afl_state_t *afl) {
 
       afl->queue_cur->exec_cksum = 0;
 
-      res =
-          calibrate_case(afl, afl->queue_cur, in_buf, afl->queue_cycle - 1, 0);
+      /* funafl code */
+      // res = calibrate_case(afl, afl->queue_cur, in_buf, afl->queue_cycle - 1, 0);
+      res = funafl_calibrate_case(afl, afl->queue_cur, in_buf, afl->queue_cycle - 1, 0, 0);
+      /* end of funafl code */
 
       if (unlikely(res == FSRV_RUN_ERROR)) {
 
@@ -3304,6 +3307,30 @@ havoc_stage:
   }
 
   new_hit_cnt = afl->queued_items + afl->saved_crashes;
+
+  /* funafl code */
+  if (new_hit_cnt == orig_hit_cnt) {
+
+    afl->not_found_new_hit++;
+
+  } else {
+
+    afl->not_found_new_hit = 0;
+    afl->skip_deterministic = 1;
+
+  }
+
+  bool cond1 = (afl->not_found_new_hit != 0);
+  bool cond2 = (afl->not_found_new_hit % (NOT_HIT * afl->not_found_base) == 0);
+  bool cond3 = (afl->not_found_new_hit % NOT_HIT == 0);
+  bool cond4 = unsigned_random_num(afl, 120) < 10;
+  if (cond1) {
+
+    if (cond2 || (cond3 && cond4)) afl->skip_deterministic = 0;
+    if (afl->not_found_base < 32) afl->not_found_base *= 2;
+
+  }
+  /* end of funafl code */
 
   if (!splice_cycle) {
 

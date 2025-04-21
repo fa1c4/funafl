@@ -28,6 +28,7 @@
 #include <limits.h>
 #include <string.h>
 #include "cmplog.h"
+#include "afl-fuzz-fun.h"
 
 #ifdef HAVE_AFFINITY
 
@@ -939,7 +940,9 @@ void perform_dry_run(afl_state_t *afl) {
 
     close(fd);
 
-    res = calibrate_case(afl, q, use_mem, 0, 1);
+    /* funafl code */
+    // res = calibrate_case(afl, q, use_mem, 0, 1);
+    res = funafl_calibrate_case(afl, q, use_mem, 0, 1, 1);
 
     /* For AFLFast schedules we update the queue entry */
     if (unlikely(afl->schedule >= FAST && afl->schedule <= RARE) &&

@@ -222,7 +222,7 @@ typedef struct afl_forkserver {
   u8   *custom_input;
   u32   custom_input_len;
   void (*late_send)(void *, const u8 *, size_t);
-  
+
   /* FunAFL avariable */
   u32* function_index;
 

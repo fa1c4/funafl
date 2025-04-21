@@ -18,6 +18,9 @@
 #include "list.h"
 
 
+// need afl_state to declare read_loc2bbs & read_bb2attributes
+struct afl_state;
+
 // score struct
 struct score_union {
     double seed_score;
@@ -48,32 +51,32 @@ struct loc2bbs {
     UT_hash_handle hh;
 };
 
-extern struct basic_block_count *bb2count;
-extern struct basic_blocks *bbs2attributes;
-extern struct loc2bbs *record_loc2bbs;
-
-extern double average_score;
-extern double sum_score;
-extern int number_score;
-extern double average_score_energy;
-extern double sum_score_energy;
-extern int number_score_energy;
-// modify back the d64 self-define type to double 
-extern double max_score;
-extern double min_score;
-extern int read_success;
-
 
 // function declaration
 int double_is_equal(double d1, double d2);
-void read_loc2bbs(char *bin_name);
-void print_loc2bbs(struct loc2bbs *loc2bb);
-void read_bb2attributes(char *base_name);
-void read_bb2attributes_not_first(u8 *base_name, u8 *fuzz_out);
-void print_bb2attributes(struct basic_blocks *bbs);
-void print_bb2attributes_not_first(struct basic_blocks *bbs);
-void write_bb_count(u8 *base_name);
 
-struct score_union* get_score_with_loc_and_update_function_count(int new_tracebit_index[], int count_new_tracebit_index);
+void add_bb_count_key(struct afl_state* afl, int bb_random_val);
+
+void parse_content(struct afl_state* afl, char *content, int parse_mode);
+
+void read_loc2bbs(struct afl_state* afl, char *bin_name);
+
+void print_loc2bbs(struct loc2bbs *loc2bb);
+
+void read_bb2attributes(struct afl_state* afl, char *base_name);
+
+void read_bb2attributes_not_first(struct afl_state* afl, u8 *base_name, u8 *fuzz_out);
+
+void print_bb2attributes(struct basic_blocks *bbs);
+
+void print_bb2attributes_not_first(struct basic_blocks *bbs);
+
+void write_bb_count(struct afl_state* afl, u8 *base_name);
+
+void add_bb_count(struct afl_state* afl, int bb);
+
+struct score_union *get_score_by_bb(struct afl_state* afl, int bb);
+
+struct score_union* get_score_with_loc_and_update_function_count(struct afl_state* afl, int new_tracebit_index[], int count_new_tracebit_index);
 
 #endif // READ_JSON_H
