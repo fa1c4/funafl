@@ -364,6 +364,16 @@ tests:	source-only
 	@cd test ; ./test-all.sh
 	@rm -f test/errors
 
+# funafl test
+.PHONY: tests-fun
+tests-fun: test-fun
+
+.PHONY: test-fun
+test-fun: source-only
+	@cd test ; ./test-fun.sh
+	@rm -f test/errors
+# end of funafl test
+
 .PHONY: performance-tests
 performance-tests:	performance-test
 .PHONY: test-performance

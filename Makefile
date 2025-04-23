@@ -32,6 +32,9 @@ help:
 tests:
 	@gmake tests
 
+test-fun:
+	@gmake test-fun
+
 unit:
 	@gmake unit
 

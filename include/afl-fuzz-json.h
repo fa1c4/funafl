@@ -10,7 +10,7 @@
 #include <limits.h>
 #include <math.h>
 
-#include "../config.h"
+#include "config.h"
 #include "cJSON/cJSON.h"
 #include "alloc-inl.h"
 #include "types.h"
@@ -53,6 +53,10 @@ struct loc2bbs {
 
 
 // function declaration
+cJSON* readin_json_file(const char* filename);
+
+char *read_info_file(u8 *input_name);
+
 int double_is_equal(double d1, double d2);
 
 void add_bb_count_key(struct afl_state* afl, int bb_random_val);

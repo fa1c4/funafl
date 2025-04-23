@@ -3,6 +3,15 @@
 # environment files
 .vscode/
 
+# debug files
+.gdb_history
+
+# test files
+test/test_hello_aflpp
+test/test_hello_aflpp.c
+test/test_hello_aflpp.sh
+test/errors
+
 # build results
 SanitizerCoverageLTO.so
 SanitizerCoveragePCGUARD.so
