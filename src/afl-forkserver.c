@@ -264,6 +264,10 @@ void afl_fsrv_init(afl_forkserver_t *fsrv) {
   fsrv->persistent_trace_bits = NULL;
 #endif
 
+  /* funafl code */
+  fsrv->function_index = NULL;
+  /* end of funafl code */
+
   fsrv->init_child_func = fsrv_exec_child;
   list_append(&fsrv_list, fsrv);
 
@@ -314,9 +318,12 @@ void afl_fsrv_init_dup(afl_forkserver_t *fsrv_to, afl_forkserver_t *from) {
   Returns the time passed to read.
   If the wait times out, returns timeout_ms + 1;
   Returns 0 if an error occurred (fd closed, signal, ...); */
-static u32 __attribute__((hot)) read_s32_timed(s32 fd, s32 *buf, u32 timeout_ms,
-                                               volatile u8 *stop_soon_p) {
 
+// debug O0 modify
+// static u32 __attribute__((hot)) read_s32_timed(s32 fd, s32 *buf, u32 timeout_ms,
+//                                                volatile u8 *stop_soon_p) {
+u32 __attribute__((hot)) read_s32_timed(s32 fd, s32 *buf, u32 timeout_ms,
+                                               volatile u8 *stop_soon_p) {
   fd_set readfds;
   FD_ZERO(&readfds);
   FD_SET(fd, &readfds);

@@ -11,12 +11,44 @@
 #include "cmplog.h"
 
 
-u32 funafl_get_function_trace(afl_state_t *afl) {
-    // 368-385
+u32 hashArray(u32* key,u32 start, u32 len, u32 seed, u32 range) {
+
+  u32 hash_val = 1;
+  for(u32 i = 0; i < len; i++) {
+      hash_val = (hash_val * seed + key[start+i]) & (range - 1);
+  }
+
+  return hash_val & (range - 1);
+
+}
+
+u32 funafl_get_function_trace_hash(afl_state_t *afl) {
+
     if (afl->fsrv.function_index[0] > 65535) {
         ACTF("Integer overflow, please check the function index");
         exit(-1);
     }
+
+    u32 hash_val = hashArray(afl->fsrv.function_index, 1, 
+                              afl->fsrv.function_index[0], 
+                              31, 65536);
+    
+    afl->global_function_trace_sum++;
+    if (afl->global_function_trace[hash_val] == 0)
+        afl->global_function_trace_count++;
+    
+    if (afl->global_function_trace_count == 0) {
+        printf("<afl-fuzz-fun> Error: global_function_trace_count is 0");
+        exit(-7);
+    }
+    afl->average_function_trace = (double)afl->global_function_trace_sum / (double)afl->global_function_trace_count;
+    afl->global_function_trace[hash_val]++;
+
+    if (afl->global_function_trace[hash_val] > afl->max_function_trace)
+        afl->max_function_trace = afl->global_function_trace[hash_val];
+
+    return hash_val;
+
 }
 
 
@@ -51,7 +83,7 @@ void funafl_print_trace(afl_state_t *afl, const u8* fuzz_out) {
 
     snprintf(output_path, output_path_len, "%s/log_trace.txt", fuzz_out);
 
-    FILE* fp = fopen(output_path, 'w');
+    FILE* fp = fopen(output_path, "w");
     if (fp == NULL) {
         perror("<print_trace> Failed to open output file");
         free(output_path);
@@ -90,7 +122,7 @@ void funafl_get_trace_bits_set_bits(afl_state_t *afl) {
 
 /* Updates the virgin bits, then reflects whether a new count or a new tuple is
  * seen in ret. */
-inline void funafl_discover_word(afl_state_t *afl, u8 *ret, u64 *current, u64 *virgin) {
+void funafl_discover_word(afl_state_t *afl, u8 *ret, u64 *current, u64 *virgin) {
     /* Optimize for (*current & *virgin) == 0 - i.e., no bits in current bitmap
        that have not been already cleared from the virgin map - since this will
        almost always be the case. */
@@ -113,7 +145,7 @@ inline void funafl_discover_word(afl_state_t *afl, u8 *ret, u64 *current, u64 *v
                         u8* cur_int = cur;
                         u8* trace_int = afl->fsrv.trace_bits;
                         afl->trace_bits_index_when_new_path_is_added = cur_int - trace_int;
-                        u8* origin_trace_bits_index_when_new_path_is_added = afl->trace_bits_index_when_new_path_is_added;
+                        u32 origin_trace_bits_index_when_new_path_is_added = afl->trace_bits_index_when_new_path_is_added;
                         
                         for (u64 trace_j = 0; trace_j < 8; ++trace_j) {
                             
@@ -146,7 +178,7 @@ inline void funafl_discover_word(afl_state_t *afl, u8 *ret, u64 *current, u64 *v
 }
 
 
-inline u8 funafl_has_new_bits(afl_state_t *afl, u8* virgin_map) {
+u8 funafl_has_new_bits(afl_state_t *afl, u8* virgin_map) {
 
     bool trace_flag = true;
     if ((SEED | ENERGY) && (afl->method_change < METHOD_CHANGE_TIMES)) {
@@ -237,15 +269,23 @@ void funafl_update_bitmap_score(afl_state_t *afl, struct queue_entry* q) {
 
             u32 top_rated_hit = afl->global_function_trace[afl->top_rated[i]->function_trace_hash];
             bool trace_start1 = (afl->global_function_trace_sum > (afl->global_function_trace_count * TRACE_START1)); 
-            bool trace_start2 = ((afl->max_function_trace / afl->average_function_trace) > TRACE_START2);
+            // bool trace_start2 = ((afl->max_function_trace / afl->average_function_trace) > TRACE_START2);
+            bool trace_start2 = (afl->max_function_trace > (afl->average_function_trace * TRACE_START2));
 
             if (TRACE1 && trace_start1 && trace_start2) {
-
+                if (q_hit > top_rated_hit) {
+                    if (double_is_equal(top_rated_hit, 0.0)) {
+                        fprintf(stderr, "<afl-fuzz-fun> Error: top_rated_hit is 0");
+                        exit(-11);
+                    }
+                    d64 keep_ratio = (d64)(q_hit - top_rated_hit) / (d64)(top_rated_hit);
+                    
+                    if (keep_ratio > TRACE_KEEP) 
+                        continue;
+                }
             }
 
-            if (double_is_equal(seed_score, 0.0) || 
-                double_is_equal(afl->top_rated[i]->seed_score, 0.0) || 
-                !SEED) {
+            if (double_is_equal(seed_score, 0.0) || double_is_equal(afl->top_rated[i]->seed_score, 0.0) || !SEED) {
                 if (fav_factor > afl->top_rated[i]->exec_us * afl->top_rated[i]->len)
                     continue;
             } else {
@@ -325,9 +365,8 @@ void funafl_update_bitmap_score(afl_state_t *afl, struct queue_entry* q) {
 // setup_shm modified in afl-fuzz.c:main() 4 places
 
 // static u8 funafl_run_target(afl_state_t *afl, char** argv, u32 timeout);
-
 fsrv_run_result_t __attribute__((hot)) funafl_fsrv_run_target(
-    afl_forkserver_t *fsrv, u32 timeout, volatile u8 *stop_soon_p) {
+  afl_forkserver_t *fsrv, u32 timeout, volatile u8 *stop_soon_p) {
 
   s32 res;
   u32 exec_ms;
@@ -819,7 +858,7 @@ u8 funafl_calibrate_case(afl_state_t *afl, struct queue_entry *q, u8 *use_mem,
             }
 
             if (TRACE1 || TRACE2) {
-                q->function_trace_hash = funafl_get_function_trace(afl);
+                q->function_trace_hash = funafl_get_function_trace_hash(afl);
             }
         }
 
@@ -895,6 +934,10 @@ u8 funafl_calibrate_case(afl_state_t *afl, struct queue_entry *q, u8 *use_mem,
 
   }
 
+  if (double_is_equal(afl->stage_max, 0.0)) {
+    fprintf(stderr, "<afl-fuzz-fun> Error: afl->stage_max is 0.0!");
+    exit(-12);
+  }
   q->exec_us = diff_us / afl->stage_max;
   if (unlikely(!q->exec_us)) { q->exec_us = 1; }
 
@@ -905,7 +948,7 @@ u8 funafl_calibrate_case(afl_state_t *afl, struct queue_entry *q, u8 *use_mem,
   afl->total_bitmap_size += q->bitmap_size;
   ++afl->total_bitmap_entries;
 
-  update_bitmap_score(afl, q);
+  funafl_update_bitmap_score(afl, q);
 
   /* If this case didn't result in new output from the instrumentation, tell
      parent. This is a non-critical problem, but something to warn the user
@@ -1192,7 +1235,7 @@ u8 __attribute__((hot)) funafl_save_if_interesting(afl_state_t *afl, void *mem, 
 
     if (TRACE1 || TRACE2) {
 
-        afl->queue_top->function_trace_hash = funafl_get_function_trace(afl);
+        afl->queue_top->function_trace_hash = funafl_get_function_trace_hash(afl);
 
     }
     /* end of funafl code */
@@ -1867,11 +1910,15 @@ u32 funafl_calculate_score(afl_state_t *afl, struct queue_entry *q) {
   bool trace_start1 = true, trace_start2 = true;
   d64 times_hit = (d64)afl->global_function_trace[q->function_trace_hash];
   d64 cur_score = afl->queue_cur->energy_score;
-
+  
+  if (double_is_equal(times_hit, 0.0)) {
+    times_hit = 1.0;
+  }
+  
   if (TRACE2 && trace_start1 && trace_start2) {
   
-    if (times_hit / afl->average_function_trace < 1) {
-  
+    if (times_hit < afl->average_function_trace) {
+
         perf_score *= pow(2, afl->average_function_trace / times_hit);
   
     } else {
@@ -1896,6 +1943,9 @@ u32 funafl_calculate_score(afl_state_t *afl, struct queue_entry *q) {
 
     } else {
         // normalizing the score
+        if (double_is_equal(afl->average_score_energy, 0.0)) {
+            afl->average_score_energy = 1.0;
+        } 
         perf_score *= cur_score / afl->average_score_energy;
 
     }

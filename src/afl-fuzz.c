@@ -599,44 +599,11 @@ int main(int argc, char **argv_orig, char **envp) {
   if (!afl) { FATAL("Could not create afl state"); }
 
   /* funafl code */
-  // initialize all funafl global variables
+  // initialize funafl global variables
   long last_modify_t = 0, modify_t = 0;
   s32 fd;
   struct stat buf;
   FILE* new_fp = NULL;
-
-  afl->max_function_trace = 0;
-  memset(afl->global_function_trace, 0, sizeof(afl->global_function_trace));
-
-  afl->record_loc2bbs = calloc(1, sizeof(struct loc2bbs));
-  afl->bb2count = calloc(1, sizeof(struct basic_block_count));
-  afl->bb2attributes = calloc(1, sizeof(struct basic_blocks));
-
-  afl->trace_bits_index_when_new_path_is_added = 0;
-  afl->count_new_tracebit_index = 0;
-  memset(afl->new_tracebit_index, 0, sizeof(afl->new_tracebit_index));
-
-  afl->average_score = 0.0;
-  afl->sum_score = 0.0;
-  afl->number_score = 0;
-
-  afl->average_score_energy = 0.0;
-  afl->sum_score_energy = 0.0;
-  afl->number_score_energy = 0;
-  afl->max_score = 0.0;
-  afl->min_score = 0.0;
-
-  memset(afl->global_function_trace, 0, sizeof(afl->global_function_trace));
-  afl->global_function_trace_count = 0;
-  afl->global_function_trace_sum = 0;
-  afl->average_function_trace = 0.0;
-  afl->max_function_trace = 0.0;
-  afl->energy_times = 0;
-
-  afl->method_change = 0;
-  afl->not_found_new_hit = 0;
-  afl->not_found_base = 0;
-  afl->read_success = 0;
   /* end of funafl code */
 
   if (get_afl_env("AFL_DEBUG")) { debug = afl->debug = 1; }
@@ -2302,6 +2269,10 @@ int main(int argc, char **argv_orig, char **envp) {
   check_binary(afl, argv[optind]);
 
   /* funafl code */
+  // u8* test_target_path = "../aflpp_benchmarks/zlib/zlib_uncompress_fuzzer";
+  // read_loc2bbs(afl, test_target_path);
+  // read_bb2attributes(afl, test_target_path);
+
   read_loc2bbs(afl, argv[optind]);
   read_bb2attributes(afl, argv[optind]);
   /* end of funafl code */

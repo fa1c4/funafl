@@ -53,7 +53,7 @@ struct loc2bbs {
 
 
 // function declaration
-cJSON* readin_json_file(const char* filename);
+cJSON* readin_json_file(const u8* filename);
 
 char *read_info_file(u8 *input_name);
 
@@ -63,11 +63,13 @@ void add_bb_count_key(struct afl_state* afl, int bb_random_val);
 
 void parse_content(struct afl_state* afl, char *content, int parse_mode);
 
-void read_loc2bbs(struct afl_state* afl, char *bin_name);
+void read_loc2bbs(struct afl_state* afl, u8* target_path);
+
+void print_json_content(cJSON* json_content);
 
 void print_loc2bbs(struct loc2bbs *loc2bb);
 
-void read_bb2attributes(struct afl_state* afl, char *base_name);
+void read_bb2attributes(struct afl_state* afl, u8* target_path);
 
 void read_bb2attributes_not_first(struct afl_state* afl, u8 *base_name, u8 *fuzz_out);
 

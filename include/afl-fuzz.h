@@ -882,17 +882,17 @@ typedef struct afl_state {
   struct basic_block_count* bb2count;
   struct basic_blocks* bb2attributes;
 
-  int trace_bits_index_when_new_path_is_added;
-  int count_new_tracebit_index;
-  int new_tracebit_index[65536];
+  u32 trace_bits_index_when_new_path_is_added;
+  u32 count_new_tracebit_index;
+  u32 new_tracebit_index[65536];
 
-  double average_score;
-  double sum_score;
-  int number_score;
+  d64 average_score;
+  d64 sum_score;
+  u32 number_score;
 
-  double average_score_energy;
-  double sum_score_energy;
-  int number_score_energy;
+  d64 average_score_energy;
+  d64 sum_score_energy;
+  u32 number_score_energy;
   d64 max_score;
   d64 min_score;
 
@@ -901,12 +901,12 @@ typedef struct afl_state {
   u32 global_function_trace_sum;
   d64 average_function_trace;
   d64 max_function_trace;
-  int energy_times;
+  u32 energy_times;
 
-  int method_change;
-  int not_found_new_hit;
-  int not_found_base;
-  int read_success;
+  u32 method_change;
+  u32 not_found_new_hit;
+  u32 not_found_base;
+  u32 read_success;
 
 } afl_state_t;
 

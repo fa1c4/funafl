@@ -72,7 +72,9 @@ inline void classify_counts(afl_forkserver_t *fsrv) {
 
 }
 
-inline static void classify_counts_mem(u64 *mem, u32 size) {
+// debug O0 modify
+// inline static void classify_counts_mem(u64 *mem, u32 size) {
+void classify_counts_mem(u64 *mem, u32 size) {
 
   u32 i = (size >> 3);
 

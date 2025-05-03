@@ -18,7 +18,7 @@
 #include "types.h"
 
 
-u32 funafl_get_function_trace(afl_state_t *afl);
+u32 funafl_get_function_trace_hash(afl_state_t *afl);
 
 u32 unsigned_random_num(afl_state_t* afl, u32 limit);
 
@@ -26,7 +26,9 @@ void funafl_print_trace(afl_state_t *afl, const u8* fuzz_out);
 
 void funafl_get_trace_bits_set_bits(afl_state_t *afl);
 
-inline u8 funafl_has_new_bits(afl_state_t *afl, u8* virgin_map);
+void funafl_discover_word(afl_state_t *afl, u8 *ret, u64 *current, u64 *virgin);
+
+u8 funafl_has_new_bits(afl_state_t *afl, u8* virgin_map);
 
 void funafl_update_bitmap_score(afl_state_t *afl, struct queue_entry* q);
 

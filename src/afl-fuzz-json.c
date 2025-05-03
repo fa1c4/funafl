@@ -7,7 +7,7 @@ int double_is_equal(double d1, double d2) {
 }
 
 // Read the JSON file and parse it using cJSON, then return the cJSON object.
-cJSON* readin_json_file(const char* filename) {
+cJSON* readin_json_file(const u8* filename) {
     FILE *file = fopen(filename, "r");
     if (file == NULL) {
         fprintf(stderr, "Could not open file %s\n", filename);
@@ -49,15 +49,15 @@ cJSON* readin_json_file(const char* filename) {
 // test one simple json file readin 
 void test_simple_json_readin() {
     const char* filename = "../aflpp_benchmarks/zlib/zlib_uncompress_fuzzer_bb2attributes.json";
-    cJSON *json = readin_json_file(filename);
-    if (json == NULL) {
+    cJSON *json_content = readin_json_file(filename);
+    if (json_content == NULL) {
         fprintf(stderr, "Failed to read JSON file %s\n", filename);
         return;
     }
 
-    print_json_content(json);
+    print_json_content(json_content);
 
-    cJSON_Delete(json);  // Free the cJSON object
+    cJSON_Delete(json_content);  // Free the cJSON object
 }
 
 
@@ -99,6 +99,11 @@ void test_all_jsons_readin() {
         "_loc2neighbors.json"
     };
 
+    if (sizeof(target_programs) / sizeof(*target_programs) == sizeof(target_names) / sizeof(*target_names)) {
+        fprintf(stderr, "<afl-fuzz-json> Error: target_programs and target_names must have same length");
+        exit(-9);
+    }
+
     int target_programs_size = sizeof(target_programs) / sizeof(target_programs[0]);
     int json_suffixs_size = sizeof(json_suffixs) / sizeof(json_suffixs[0]);
     int failed_cnt = 0;
@@ -125,14 +130,15 @@ void test_all_jsons_readin() {
 
     printf("Total failed to read JSON files: %d\n", failed_cnt);
     if (failed_cnt == 0) {
-        printf("All target jsons are readable.\n");
+        fprintf(stdout, "All target jsons are readable.\n");
     } else {
-        printf("Some target jsons are not readable.\n");
+        fprintf(stderr, "Some target jsons are not readable.\n");
     }
 }
 
 // print out json content on stdout
 void print_json_content(cJSON* json_content) {
+    
     if (json_content == NULL) {
         fprintf(stderr, "JSON content is NULL\n");
         return;
@@ -146,6 +152,7 @@ void print_json_content(cJSON* json_content) {
     } else {
         fprintf(stderr, "Failed to print JSON object\n");
     }
+
 }
 
 
@@ -172,6 +179,12 @@ double get_score_for_array(double attributes[]) {
     double res = 0.0;
     for (int i = 0; i < ATTRIBUTES_NUMBER; ++i) {
         res += attributes[i] * attributes[i];
+    }
+    
+    // check res > 0.0
+    if (res <= 0.0) {
+        fprintf(stderr, "<afl-fuzz-json> Error: Invalid score: %f\n", res);
+        exit(-10);
     }
 
     return sqrt(res);
@@ -341,10 +354,9 @@ void funafl_parse_cjson(struct afl_state* afl, cJSON* cjson, int parse_mode) {
 }
 
 
-void read_bb2attributes(struct afl_state* afl, u8* base_name, u8* target_name) {
+void read_bb2attributes(struct afl_state* afl, u8* target_path) {
     char filename[256];
-    snprintf(filename, sizeof(filename), "%s/%s%s", 
-        base_name, target_name, "_bb2attributes.json");
+    snprintf(filename, sizeof(filename), "%s%s", target_path, "_bb2attributes.json");
 
     cJSON *json = readin_json_file(filename);
     if (json == NULL) {
@@ -373,10 +385,9 @@ void read_bb2attributes_not_first(struct afl_state* afl, u8* base_name, u8* fuzz
     cJSON_Delete(json);  // Free the cJSON object
 }
 
-void read_loc2bbs(struct afl_state* afl, u8* base_name, u8* target_name) {
+void read_loc2bbs(struct afl_state* afl, u8* target_path) {
     char filename[256];
-    snprintf(filename, sizeof(filename), "%s/%s%s", 
-        base_name, target_name, "_loc2bbs.json");
+    snprintf(filename, sizeof(filename), "%s%s", target_path, "_loc2addrs.json");
 
     cJSON *json = readin_json_file(filename);
     if (json == NULL) {
@@ -453,23 +464,24 @@ struct score_union* get_score_with_loc_and_update_function_count(struct afl_stat
     res->seed_score = bb_num == 0?
                         afl->average_score:
                         score_seed / (double)bb_num;
+
     res->energy_score = bb_num_energy == 0?
                         afl->average_score_energy:
                         score_energy / (double)bb_num_energy;
-
-    ++afl->number_score;
-    ++afl->number_score_energy;
-    if (afl->number_score > 2147483600 || afl->number_score_energy > 2147483600) {
-        fprintf(stderr, "Error: score overflow\n");
-        afl->number_score = 1;
-        afl->number_score_energy = 1;
-    }
     
     // update sum score
     afl->sum_score += res->seed_score;
     afl->sum_score_energy += res->energy_score;
 
     // calculate average score
+    if (afl->number_score == 0) {
+        fprintf(stderr, "<afl-fuzz-json> Error: number_score is 0\n");
+        exit(-4);
+    }
+    if (afl->number_score_energy == 0) {
+        fprintf(stderr, "<afl-fuzz-json> Error: number_score_energy is 0\n");
+        exit(-4);
+    }
     afl->average_score = afl->sum_score / (double)afl->number_score;
     afl->average_score_energy = afl->sum_score_energy / (double)afl->number_score_energy;
 
@@ -479,6 +491,14 @@ struct score_union* get_score_with_loc_and_update_function_count(struct afl_stat
     }
     if (res->seed_score < afl->min_score) {
         afl->min_score = res->seed_score;
+    }
+
+    ++afl->number_score;
+    ++afl->number_score_energy;
+    if (afl->number_score > 2147483600 || afl->number_score_energy > 2147483600) {
+        fprintf(stderr, "Error: score overflow\n");
+        afl->number_score = 1;
+        afl->number_score_energy = 1;
     }
 
     return res;

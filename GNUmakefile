@@ -163,9 +163,16 @@ else
   CFLAGS ?= -O2 $(CFLAGS_OPT) # -funroll-loops is slower on modern compilers
 endif
 
+# funafl add cJSON include path
+# override CFLAGS += -g -Wno-pointer-sign -Wno-variadic-macros -Wall -Wextra -Wno-pointer-arith \
+# 			-fPIC -I include/ -I include/cJSON -DAFL_PATH=\"$(HELPER_PATH)\"  \
+# 			-DBIN_PATH=\"$(BIN_PATH)\" -DDOC_PATH=\"$(DOC_PATH)\"
+
+# debug -O0
 override CFLAGS += -g -Wno-pointer-sign -Wno-variadic-macros -Wall -Wextra -Wno-pointer-arith \
-			-fPIC -I include/ -DAFL_PATH=\"$(HELPER_PATH)\"  \
+			-fPIC -O0 -I include/ -I include/cJSON -DAFL_PATH=\"$(HELPER_PATH)\"  \
 			-DBIN_PATH=\"$(BIN_PATH)\" -DDOC_PATH=\"$(DOC_PATH)\"
+
 # -fstack-protector
 
 ifeq "$(SYS)" "FreeBSD"
@@ -195,7 +202,8 @@ ifeq "$(SYS)" "Haiku"
   #SPECIAL_PERFORMANCE += -DUSEMMAP=1
 endif
 
-AFL_FUZZ_FILES = $(wildcard src/afl-fuzz*.c)
+# funafl add cJSON include path
+AFL_FUZZ_FILES = $(wildcard src/afl-fuzz*.c) include/cJSON/cJSON.c
 
 ifneq "$(shell command -v python3m 2>/dev/null)" ""
   ifneq "$(shell command -v python3m-config 2>/dev/null)" ""

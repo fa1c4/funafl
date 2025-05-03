@@ -27,6 +27,10 @@
 #include <limits.h>
 #include "afl-fuzz.h"
 #include "envs.h"
+// funafl code
+#include <float.h>
+#include "afl-fuzz-json.h"
+// funafl code
 
 char *power_names[POWER_SCHEDULES_NUM] = {"explore", "mmopt", "exploit",
                                           "fast",    "coe",   "lin",
@@ -65,6 +69,48 @@ static void init_mopt_globals(afl_state_t *afl) {
   pilot->splice_stagenameshort = "MOpt_splice";
 
 }
+
+/* funafl code */
+static void init_funafl_globals(afl_state_t* afl) {
+
+  afl->max_function_trace = 0;
+
+  afl->record_loc2bbs = (struct loc2bbs*)calloc(1, sizeof(struct loc2bbs));
+  afl->bb2count = (struct basic_block_count*)calloc(1, sizeof(struct basic_block_count));
+  afl->bb2attributes = (struct basic_blocks*)calloc(1, sizeof(struct basic_blocks));
+  if (!afl->record_loc2bbs || !afl->bb2count || !afl->bb2attributes) {
+    FATAL("<afl-fuzz> Error: Could not calloc funafl global variables loc2bbs, bb2count, bb2attributes");
+    exit(-6);
+  }
+
+  afl->trace_bits_index_when_new_path_is_added = 0;
+  afl->count_new_tracebit_index = 0;
+  memset(afl->new_tracebit_index, 0, sizeof(afl->new_tracebit_index));
+
+  afl->average_score = 1.0;
+  afl->sum_score = 0.0;
+  afl->number_score = 1; // avoid division by zero
+
+  afl->average_score_energy = 1.0;
+  afl->sum_score_energy = 0.0;
+  afl->number_score_energy = 1; // avoid division by zero
+  afl->max_score = 0.0;
+  afl->min_score = FLT_MAX;
+
+  memset(afl->global_function_trace, 0, sizeof(afl->global_function_trace));
+  afl->global_function_trace_count = 0;
+  afl->global_function_trace_sum = 0;
+  afl->average_function_trace = 1.0;
+  afl->max_function_trace = 1.0;
+  afl->energy_times = 0;
+
+  afl->method_change = 0;
+  afl->not_found_new_hit = 0;
+  afl->not_found_base = 1;
+  afl->read_success = 0;
+
+}
+/* end of funafl code */
 
 /* A global pointer to all instances is needed (for now) for signals to arrive
  */
@@ -142,6 +188,8 @@ void afl_state_init(afl_state_t *afl, uint32_t map_size) {
       (struct havoc_profile *)ck_alloc(sizeof(struct havoc_profile));
 
   init_mopt_globals(afl);
+
+  init_funafl_globals(afl);
 
   list_append(&afl_states, afl);
 
