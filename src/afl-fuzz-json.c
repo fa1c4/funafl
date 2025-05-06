@@ -1,3 +1,4 @@
+#include <unistd.h>
 #include "afl-fuzz-json.h"
 #include "afl-fuzz.h"
 
@@ -238,117 +239,108 @@ void funafl_parse_cjson(struct afl_state* afl, cJSON* cjson, int parse_mode) {
     struct basic_blocks *bb = NULL;
     struct loc2bbs *l2b = NULL;
 
-    cJSON *item = NULL;
-    cJSON *key = NULL;
-
     // Iterate through the JSON object
+    cJSON *item = NULL;
     cJSON_ArrayForEach(item, cjson) {
-        if (cJSON_IsObject(item)) {
-            key = cJSON_GetObjectItem(item, "key");
-            if (key && cJSON_IsString(key)) {
-                int loc = atoi(key->valuestring);
+        if (!cJSON_IsArray(item)) {
+            fprintf(stderr, "Invalid value format, should be array\n");
+            return;
+        }
+
+        const char* key_str = item->string;
+        if (key_str) {
+
+            int loc = atoi(key_str);
+            
+            if (parse_mode == 0) { // parse bb2attributes first
                 
-                if (parse_mode == 0) { // parse bb2attributes first
-                    
-                    HASH_FIND_INT(afl->bb2attributes, &loc, bb);
-                    if (bb == NULL) {
-                        bb = calloc(1, sizeof(struct basic_blocks));
-                        bb->bb_random = loc;
-                        HASH_ADD_INT(afl->bb2attributes, bb_random, bb);
-                        add_bb_count_key(afl, loc);
-                    }
-
-                    cJSON* values = item->child;
-                    if (cJSON_IsArray(values)) {
-                        cJSON* value = NULL;
-                        int idx = 0;
-                        cJSON_ArrayForEach(value, values) {
-                            if (idx < ATTRIBUTES_NUMBER) {
-                                bb->attributes_seed[idx] = value->valuedouble;
-                                bb->attributes_energy[idx] = value->valuedouble;
-                                idx++;
-                            } else {
-                                fprintf(stderr, "Exceeded maximum number of attributes\n");
-                                break;
-                            }
-                        }
-
-                        bb->score_seed = get_score_for_array(bb->attributes_seed);
-                        bb->score_energy = get_score_for_array(bb->attributes_energy);
-
-                    } else {
-                        fprintf(stderr, "Invalid attributes format, which should be array\n");
-                        return;
-                    }
-
-                } else if (parse_mode == 1) { // parse bb2attributes not first
-                    
-                    HASH_FIND_INT(afl->bb2attributes, &loc, bb);
-                    if (bb == NULL) {
-                        fprintf(stderr, "error: bb not found while parsing bb2attributes not first\n");
-                        return;
-                    }
-
-                    cJSON* values = item->child;
-                    if (cJSON_IsArray(values)) {
-                        cJSON* value = NULL;
-                        int idx = 0;
-                        cJSON_ArrayForEach(value, values) {
-                            if (idx < ATTRIBUTES_NUMBER) {
-                                bb->attributes_seed[idx] = value->valuedouble;
-                                idx++;
-                            } else {
-                                fprintf(stderr, "Exceeded maximum number of attributes\n");
-                                break;
-                            }
-                        }
-
-                        bb->score_seed = get_score_for_array(bb->attributes_seed);
-
-                    } else {
-                        fprintf(stderr, "Invalid attributes format, which should be array\n");
-                        return;
-                    }
-
-                } else if (parse_mode == 2) { // parse loc2bbs
-
-                    HASH_FIND_INT(afl->record_loc2bbs, &loc, l2b);
-                    if (l2b == NULL) {
-                        l2b = calloc(1, sizeof(struct loc2bbs));
-                        l2b->loc = loc;
-                        l2b->length = 0;
-                        HASH_ADD_INT(afl->record_loc2bbs, loc, l2b);
-                    }
-
-                    cJSON* values = item->child;
-                    if (cJSON_IsArray(values)) {
-                        cJSON* value = NULL;
-                        cJSON_ArrayForEach(value, values) {
-                            l2b->bbs[l2b->length++] = value->valueint;
-                            if (l2b->length >= 20) {
-                                fprintf(stderr, "Exceeded maximum number of functions\n");
-                                break;
-                            }
-                        }
-                    } else {
-                        fprintf(stderr, "Invalid loc2bbs format, which should be array\n");
-                        return;
-                    }
-
-                } else { // invalid parse mode
-                    fprintf(stderr, "Invalid parse mode\n");
+                HASH_FIND_INT(afl->bb2attributes, &loc, bb);
+                if (bb == NULL) {
+                    bb = calloc(1, sizeof(struct basic_blocks));
+                    bb->bb_random = loc;
+                    HASH_ADD_INT(afl->bb2attributes, bb_random, bb);
+                    add_bb_count_key(afl, loc);
+                }
+                
+                if (bb == NULL) {
+                    fprintf(stderr, "<funafl_parse_cjson> Error: bb not found while parsing attributes\n");
                     return;
                 }
 
-            } else {
-                fprintf(stderr, "Invalid data key format, which should be string\n");
+                cJSON* value = NULL;
+                int idx = 0;
+                cJSON_ArrayForEach(value, item) {
+                    if (idx < ATTRIBUTES_NUMBER) {
+                        bb->attributes_seed[idx] = value->valuedouble;
+                        bb->attributes_energy[idx] = value->valuedouble;
+                        idx++;
+                    } else {
+                        fprintf(stderr, "Exceeded maximum number of attributes\n");
+                        break;
+                    }
+                }
+
+                bb->score_seed = get_score_for_array(bb->attributes_seed);
+                bb->score_energy = get_score_for_array(bb->attributes_energy);
+
+            } else if (parse_mode == 1) { // parse bb2attributes not first
+                
+                HASH_FIND_INT(afl->bb2attributes, &loc, bb);
+                if (bb == NULL) {
+                    fprintf(stderr, "error: bb not found while parsing bb2attributes not first\n");
+                    return;
+                }
+
+                cJSON* value = NULL;
+                int idx = 0;
+                cJSON_ArrayForEach(value, item) {
+                    if (idx < ATTRIBUTES_NUMBER) {
+                        bb->attributes_seed[idx] = value->valuedouble;
+                        idx++;
+                    } else {
+                        fprintf(stderr, "Exceeded maximum number of attributes\n");
+                        break;
+                    }
+                }
+
+                bb->score_seed = get_score_for_array(bb->attributes_seed);
+
+            } else if (parse_mode == 2) { // parse loc2bbs
+
+                HASH_FIND_INT(afl->record_loc2bbs, &loc, l2b);
+                if (l2b == NULL) {
+                    l2b = (struct loc2bbs*)calloc(1, sizeof(struct loc2bbs));
+                    l2b->loc = loc;
+                    l2b->length = 0;
+                    HASH_ADD_INT(afl->record_loc2bbs, loc, l2b);
+                }
+
+                cJSON* value = NULL;
+                cJSON_ArrayForEach(value, item) {
+                    l2b->bbs[l2b->length++] = value->valueint;
+                    if (l2b->length >= 256) {
+                        fprintf(stderr, "Exceeded maximum number of functions\n");
+                        break;
+                    }
+                }
+
+            } else { // invalid parse mode
+                fprintf(stderr, "Invalid parse mode\n");
                 return;
             }
 
         } else {
-            fprintf(stderr, "Invalid JSON format\n");
+            fprintf(stderr, "Invalid data key format, which should be string\n");
             return;
         }
+
+    }
+
+    // debug information to makesure the count of loc2bbs correct
+    if (afl->debug && parse_mode == 2) {
+        printf("[INFO] Total loc2bbs count: %u\n", HASH_COUNT(afl->record_loc2bbs));
+        fflush(stdout);
+        sleep(5);
     }
 
 }
@@ -419,7 +411,7 @@ struct score_union* get_score_by_bb(struct afl_state* afl, int bb_loc) {
 }
 
 
-struct score_union* get_score_with_loc_and_update_function_count(struct afl_state* afl,
+struct score_union* funafl_get_score_with_loc_and_update_function_count(struct afl_state* afl,
     int new_tracebit_index[], int count_new_tracebit_index) {
     
     double score_seed = 0.0, score_energy = 0.0;
@@ -432,7 +424,8 @@ struct score_union* get_score_with_loc_and_update_function_count(struct afl_stat
         struct loc2bbs* tmp_loc2bbs = NULL;
         HASH_FIND_INT(afl->record_loc2bbs, &loc, tmp_loc2bbs);
         if (tmp_loc2bbs == NULL) {
-            fprintf(stderr, "Error: loc2bbs not found\n");
+            if (afl->debug)
+                fprintf(stderr, "[Error] loc2bbs not found for loc=%d\n", loc);
             continue;
         }
 

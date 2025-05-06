@@ -870,12 +870,20 @@ void sync_fuzzers(afl_state_t *afl) {
 
         u32 new_len = write_to_testcase(afl, (void **)&mem, st.st_size, 1);
 
-        fault = fuzz_run_target(afl, &afl->fsrv, afl->fsrv.exec_tmout);
+        // fault = fuzz_run_target(afl, &afl->fsrv, afl->fsrv.exec_tmout);
+        /* funafl code */
+        fault = funafl_fuzz_run_target(afl, &afl->fsrv, afl->fsrv.exec_tmout);
+        /* end of funafl code */
 
         if (afl->stop_soon) { goto close_sync; }
 
         afl->syncing_party = sd_ent->d_name;
-        afl->queued_imported += save_if_interesting(afl, mem, new_len, fault);
+        
+        // afl->queued_imported += save_if_interesting(afl, mem, new_len, fault);
+        /* funafl code */
+        afl->queued_imported += funafl_save_if_interesting(afl, mem, new_len, fault);
+        /* end of funafl code */
+
         show_stats(afl);
         afl->syncing_party = 0;
 
@@ -1193,7 +1201,10 @@ u8 __attribute__((hot)) common_fuzz_stuff(afl_state_t *afl, u8 *out_buf,
 
   }
 
-  fault = fuzz_run_target(afl, &afl->fsrv, afl->fsrv.exec_tmout);
+  // fault = fuzz_run_target(afl, &afl->fsrv, afl->fsrv.exec_tmout);
+  /* funafl code */
+  fault = funafl_fuzz_run_target(afl, &afl->fsrv, afl->fsrv.exec_tmout);
+  /* end of funafl code */
 
   if (afl->stop_soon) { return 1; }
 
@@ -1225,7 +1236,10 @@ u8 __attribute__((hot)) common_fuzz_stuff(afl_state_t *afl, u8 *out_buf,
 
   /* This handles FAULT_ERROR for us: */
 
-  afl->queued_discovered += save_if_interesting(afl, out_buf, len, fault);
+  // afl->queued_discovered += save_if_interesting(afl, out_buf, len, fault);
+  /* funafl code */
+  afl->queued_discovered += funafl_save_if_interesting(afl, out_buf, len, fault);
+  /* end of funafl code */
 
   if (!(afl->stage_cur % afl->stats_update_freq) ||
       afl->stage_cur + 1 == afl->stage_max) {

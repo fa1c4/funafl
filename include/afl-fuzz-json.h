@@ -47,7 +47,7 @@ extern list_t bbs_list;
 struct loc2bbs {
     int loc;
     int length;
-    int bbs[20];
+    int bbs[256];
     UT_hash_handle hh;
 };
 
@@ -81,8 +81,9 @@ void write_bb_count(struct afl_state* afl, u8 *base_name);
 
 void add_bb_count(struct afl_state* afl, int bb);
 
-struct score_union *get_score_by_bb(struct afl_state* afl, int bb);
+struct score_union* get_score_by_bb(struct afl_state* afl, int bb);
 
-struct score_union* get_score_with_loc_and_update_function_count(struct afl_state* afl, int new_tracebit_index[], int count_new_tracebit_index);
+struct score_union* funafl_get_score_with_loc_and_update_function_count(struct afl_state* afl, 
+    int new_tracebit_index[], int count_new_tracebit_index);
 
 #endif // READ_JSON_H

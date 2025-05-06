@@ -154,6 +154,9 @@ void funafl_discover_word(afl_state_t *afl, u8 *ret, u64 *current, u64 *virgin) 
 
                                 if (afl->count_new_tracebit_index < 65536) {
                                     afl->new_tracebit_index[afl->count_new_tracebit_index++] = afl->trace_bits_index_when_new_path_is_added;
+                                    if (afl->debug) {
+                                      fprintf(stderr, "[DEBUG] New trace index: %u\n", afl->new_tracebit_index[afl->count_new_tracebit_index - 1]);
+                                    }
                                 } else {
                                     printf("The number of new trace bits exceeds 65536, please check the code\n");
                                     exit(-1);
@@ -223,6 +226,28 @@ u8 funafl_has_new_bits(afl_state_t *afl, u8* virgin_map) {
 
     return ret;
   
+}
+
+
+u8 funafl_has_new_bits_unclassified(afl_state_t *afl, u8 *virgin_map) {
+
+  /* Handle the hot path first: no new coverage */
+  u8 *end = afl->fsrv.trace_bits + afl->fsrv.map_size;
+
+#ifdef WORD_SIZE_64
+
+  if (!skim((u64 *)virgin_map, (u64 *)afl->fsrv.trace_bits, (u64 *)end))
+    return 0;
+
+#else
+
+  if (!skim((u32 *)virgin_map, (u32 *)afl->fsrv.trace_bits, (u32 *)end))
+    return 0;
+
+#endif                                                     /* ^WORD_SIZE_64 */
+  classify_counts(&afl->fsrv);
+  return funafl_has_new_bits(afl, virgin_map);
+
 }
 
 
@@ -701,6 +726,77 @@ store_persistent_record: {
 
 }
 
+
+/* Execute target application, monitoring for timeouts. Return status
+   information. The called program will update afl->fsrv->trace_bits. */
+
+fsrv_run_result_t __attribute__((hot)) funafl_fuzz_run_target(afl_state_t      *afl,
+                                                       afl_forkserver_t *fsrv,
+                                                       u32 timeout) {
+
+#ifdef PROFILING
+  static u64      time_spent_start = 0;
+  struct timespec spec;
+  if (time_spent_start) {
+
+    u64 current;
+    clock_gettime(CLOCK_REALTIME, &spec);
+    current = (spec.tv_sec * 1000000000) + spec.tv_nsec;
+    time_spent_working += (current - time_spent_start);
+
+  }
+
+#endif
+
+  fsrv_run_result_t res = funafl_fsrv_run_target(fsrv, timeout, &afl->stop_soon);
+
+#ifdef __AFL_CODE_COVERAGE
+  if (unlikely(!fsrv->persistent_trace_bits)) {
+
+    // On the first run, we allocate the persistent map to collect coverage.
+    fsrv->persistent_trace_bits = (u8 *)malloc(fsrv->map_size);
+    memset(fsrv->persistent_trace_bits, 0, fsrv->map_size);
+
+  }
+
+  for (u32 i = 0; i < fsrv->map_size; ++i) {
+
+    if (fsrv->persistent_trace_bits[i] != 255 && fsrv->trace_bits[i]) {
+
+      fsrv->persistent_trace_bits[i]++;
+
+    }
+
+  }
+
+#endif
+
+  /* If post_run() function is defined in custom mutator, the function will be
+     called each time after AFL++ executes the target program. */
+
+  if (unlikely(afl->custom_mutators_count)) {
+
+    LIST_FOREACH(&afl->custom_mutator_list, struct custom_mutator, {
+
+      if (unlikely(el->afl_custom_post_run)) {
+
+        el->afl_custom_post_run(el->data);
+
+      }
+
+    });
+
+  }
+
+#ifdef PROFILING
+  clock_gettime(CLOCK_REALTIME, &spec);
+  time_spent_start = (spec.tv_sec * 1000000000) + spec.tv_nsec;
+#endif
+
+  return res;
+
+}
+
 // static u8 funafl_calibrate_case(afl_state_t *afl, char** argv, struct queue_entry* q, u8* use_mem, u32 handicap, u8 from_queue,int flag);
 
 /* Calibrate a new test case. This is done when processing the input directory
@@ -772,7 +868,7 @@ u8 funafl_calibrate_case(afl_state_t *afl, struct queue_entry *q, u8 *use_mem,
 
     (void)write_to_testcase(afl, (void **)&use_mem, q->len, 1);
 
-    fault = fuzz_run_target(afl, &afl->fsrv, use_tmout);
+    fault = funafl_fuzz_run_target(afl, &afl->fsrv, use_tmout);
 
     /* afl->stop_soon is set by the handler for Ctrl+C. When it's pressed,
        we want to bail out quickly. */
@@ -796,7 +892,7 @@ u8 funafl_calibrate_case(afl_state_t *afl, struct queue_entry *q, u8 *use_mem,
   if (q->exec_cksum) {
 
     memcpy(afl->first_trace, afl->fsrv.trace_bits, afl->fsrv.map_size);
-    hnb = has_new_bits(afl, afl->virgin_bits);
+    hnb = funafl_has_new_bits(afl, afl->virgin_bits);
     if (hnb > new_bits) { new_bits = hnb; }
 
   }
@@ -815,7 +911,7 @@ u8 funafl_calibrate_case(afl_state_t *afl, struct queue_entry *q, u8 *use_mem,
 
     (void)write_to_testcase(afl, (void **)&use_mem, q->len, 1);
 
-    fault = fuzz_run_target(afl, &afl->fsrv, use_tmout);
+    fault = funafl_fuzz_run_target(afl, &afl->fsrv, use_tmout);
 
     // update the time spend in calibration after each execution, as those may
     // be slow
@@ -842,14 +938,14 @@ u8 funafl_calibrate_case(afl_state_t *afl, struct queue_entry *q, u8 *use_mem,
     cksum = hash64(afl->fsrv.trace_bits, afl->fsrv.map_size, HASH_CONST);
     if (q->exec_cksum != cksum) {
 
-      hnb = has_new_bits(afl, afl->virgin_bits);
+      hnb = funafl_has_new_bits(afl, afl->virgin_bits);
       if (hnb > new_bits) { new_bits = hnb; }
 
         /* funafl code */
         if (cali_flag) {
             if (SEED || ENERGY) {
                 afl->method_change++;
-                struct score_union* sc = get_score_with_loc_and_update_function_count(afl,
+                struct score_union* sc = funafl_get_score_with_loc_and_update_function_count(afl,
                     afl->new_tracebit_index, afl->count_new_tracebit_index);
                 
                 q->seed_score = sc->seed_score;
@@ -1082,7 +1178,7 @@ u8 __attribute__((hot)) funafl_save_if_interesting(afl_state_t *afl, void *mem, 
         unlikely(afl->san_abstraction == COVERAGE_INCREASE)) {
 
       /* Check if the input increase the coverage */
-      new_bits = has_new_bits_unclassified(afl, afl->virgin_bits);
+      new_bits = funafl_has_new_bits_unclassified(afl, afl->virgin_bits);
 
       if (unlikely(new_bits)) { feed_san = 1; }
 
@@ -1111,7 +1207,7 @@ u8 __attribute__((hot)) funafl_save_if_interesting(afl_state_t *afl, void *mem, 
       for (san_idx = 0; san_idx < afl->san_binary_length; san_idx++) {
 
         len = write_to_testcase(afl, &mem, len, 0);
-        san_fault = fuzz_run_target(afl, &afl->san_fsrvs[san_idx],
+        san_fault = funafl_fuzz_run_target(afl, &afl->san_fsrvs[san_idx],
                                     afl->san_fsrvs[san_idx].exec_tmout);
 
         // DEBUGF("ASAN Result: %hhd\n", asan_fault);
@@ -1153,7 +1249,7 @@ u8 __attribute__((hot)) funafl_save_if_interesting(afl_state_t *afl, void *mem, 
 
       /* If we are in coverage increasing abstraction and have fed input to
          sanitizers, we are sure it has new bits.*/
-      new_bits = has_new_bits_unclassified(afl, afl->virgin_bits);
+      new_bits = funafl_has_new_bits_unclassified(afl, afl->virgin_bits);
 
     }
 
@@ -1223,7 +1319,7 @@ u8 __attribute__((hot)) funafl_save_if_interesting(afl_state_t *afl, void *mem, 
     if (SEED || ENERGY) {
 
         afl->method_change++;
-        struct score_union* sc = get_score_with_loc_and_update_function_count(afl,
+        struct score_union* sc = funafl_get_score_with_loc_and_update_function_count(afl,
             afl->new_tracebit_index, afl->count_new_tracebit_index);
         
         afl->queue_top->seed_score = sc->seed_score;
@@ -1355,7 +1451,7 @@ may_save_fault:
 
         simplify_trace(afl, afl->fsrv.trace_bits);
 
-        if (!has_new_bits(afl, afl->virgin_tmout)) { return keeping; }
+        if (!funafl_has_new_bits(afl, afl->virgin_tmout)) { return keeping; }
 
       }
 
@@ -1408,7 +1504,7 @@ may_save_fault:
 
         }
 
-        new_fault = fuzz_run_target(afl, &afl->fsrv, afl->hang_tmout);
+        new_fault = funafl_fuzz_run_target(afl, &afl->fsrv, afl->hang_tmout);
         classify_counts(&afl->fsrv);
 
         /* A corner case that one user reported bumping into: increasing the
@@ -1495,7 +1591,7 @@ may_save_fault:
 
         simplify_trace(afl, afl->fsrv.trace_bits);
 
-        if (!has_new_bits(afl, afl->virgin_crash)) { return keeping; }
+        if (!funafl_has_new_bits(afl, afl->virgin_crash)) { return keeping; }
 
       }
 

@@ -28,6 +28,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "asanfuzz.h"
+#include "afl-fuzz-fun.h"
 #if !defined NAME_MAX
   #define NAME_MAX _XOPEN_NAME_MAX
 #endif
@@ -230,7 +231,10 @@ inline u8 has_new_bits(afl_state_t *afl, u8 *virgin_map) {
   u8 ret = 0;
   while (i--) {
 
-    if (unlikely(*current)) discover_word(&ret, current, virgin);
+    // if (unlikely(*current)) discover_word(&ret, current, virgin);
+    /* funafl code */
+    if (unlikely(*current)) funafl_discover_word(afl, &ret, current, virgin);
+    /* end of funafl code */
 
     current++;
     virgin++;
@@ -592,8 +596,13 @@ u8 __attribute__((hot)) save_if_interesting(afl_state_t *afl, void *mem,
       for (san_idx = 0; san_idx < afl->san_binary_length; san_idx++) {
 
         len = write_to_testcase(afl, &mem, len, 0);
-        san_fault = fuzz_run_target(afl, &afl->san_fsrvs[san_idx],
+        
+        // san_fault = fuzz_run_target(afl, &afl->san_fsrvs[san_idx],
+        //                             afl->san_fsrvs[san_idx].exec_tmout);
+        /* funafl code */
+        san_fault = funafl_fuzz_run_target(afl, &afl->san_fsrvs[san_idx],
                                     afl->san_fsrvs[san_idx].exec_tmout);
+        /* end of funafl code */
 
         // DEBUGF("ASAN Result: %hhd\n", asan_fault);
 
@@ -768,7 +777,10 @@ u8 __attribute__((hot)) save_if_interesting(afl_state_t *afl, void *mem,
 
     /* Try to calibrate inline; this also calls update_bitmap_score() when
        successful. */
-    res = calibrate_case(afl, afl->queue_top, mem, afl->queue_cycle - 1, 0);
+    // res = calibrate_case(afl, afl->queue_top, mem, afl->queue_cycle - 1, 0);
+    /* funafl code */
+    res = funafl_calibrate_case(afl, afl->queue_top, mem, afl->queue_cycle - 1, 0, 0);
+    /* end of funafl code */
 
     if (unlikely(res == FSRV_RUN_ERROR)) {
 
@@ -864,7 +876,11 @@ may_save_fault:
 
         }
 
-        new_fault = fuzz_run_target(afl, &afl->fsrv, afl->hang_tmout);
+        // new_fault = fuzz_run_target(afl, &afl->fsrv, afl->hang_tmout);
+        /* funafl code */
+        new_fault = funafl_fuzz_run_target(afl, &afl->fsrv, afl->hang_tmout);
+        /* end of funafl code */
+        
         classify_counts(&afl->fsrv);
 
         /* A corner case that one user reported bumping into: increasing the

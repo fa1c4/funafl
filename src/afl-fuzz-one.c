@@ -24,11 +24,12 @@
  */
 
 #include "afl-fuzz.h"
-#include "afl-fuzz-fun.h"
 #include <string.h>
 #include <limits.h>
 #include "cmplog.h"
 #include "afl-mutations.h"
+// funafl header
+#include "afl-fuzz-fun.h"
 
 /* MOpt */
 
@@ -511,8 +512,12 @@ u8 fuzz_one_original(afl_state_t *afl) {
   if (likely(!afl->old_seed_selection))
     orig_perf = perf_score = afl->queue_cur->perf_score;
   else
+    // afl->queue_cur->perf_score = orig_perf = perf_score =
+    //     calculate_score(afl, afl->queue_cur);
+    /* funafl code */
     afl->queue_cur->perf_score = orig_perf = perf_score =
-        calculate_score(afl, afl->queue_cur);
+        funafl_calculate_score(afl, afl->queue_cur);
+    /* end of funafl code */
 
   if (unlikely(perf_score <= 0 && afl->active_items > 1)) {
 

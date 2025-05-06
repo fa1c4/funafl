@@ -30,12 +30,17 @@ void funafl_discover_word(afl_state_t *afl, u8 *ret, u64 *current, u64 *virgin);
 
 u8 funafl_has_new_bits(afl_state_t *afl, u8* virgin_map);
 
+u8 funafl_has_new_bits_unclassified(afl_state_t *afl, u8 *virgin_map);
+
 void funafl_update_bitmap_score(afl_state_t *afl, struct queue_entry* q);
 
 // setup_shm 1505-1536
 
 // 2425-2629 comp to afl++ | 2440-2443 function_index
-u8 funafl_run_target(afl_state_t *afl, char** argv, u32 timeout); 
+// u8 funafl_run_target(afl_state_t *afl, char** argv, u32 timeout); 
+fsrv_run_result_t __attribute__((hot)) funafl_fsrv_run_target(afl_forkserver_t *fsrv, u32 timeout, volatile u8 *stop_soon_p);
+
+fsrv_run_result_t __attribute__((hot)) funafl_fuzz_run_target(afl_state_t *afl, afl_forkserver_t *fsrv, u32 timeout);
 
 // u8 funafl_calibrate_case(afl_state_t *afl, struct queue_entry *q, u8 *use_mem, u32 handicap, u8 from_queue);
 // 2699-2856 compto afl++ | 2764-2776

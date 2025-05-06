@@ -2897,7 +2897,10 @@ int main(int argc, char **argv_orig, char **envp) {
 
       afl->total_bitmap_size += q->bitmap_size;
       ++afl->total_bitmap_entries;
-      update_bitmap_score(afl, q);
+      // update_bitmap_score(afl, q);
+      /* funafl code */
+      funafl_update_bitmap_score(afl, q);
+      /* end of funafl code */
 
       if (q->was_fuzzed) { --afl->pending_not_fuzzed; }
 
@@ -3275,7 +3278,10 @@ int main(int argc, char **argv_orig, char **envp) {
 
           if (likely(!afl->queue_buf[i]->disabled)) {
 
-            update_bitmap_score(afl, afl->queue_buf[i]);
+            // update_bitmap_score(afl, afl->queue_buf[i]);
+            /* funafl code */
+            funafl_update_bitmap_score(afl, afl->queue_buf[i]);
+            /* end of funafl code */
 
           }
 
