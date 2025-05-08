@@ -2273,8 +2273,8 @@ int main(int argc, char **argv_orig, char **envp) {
   // read_loc2bbs(afl, test_target_path);
   // read_bb2attributes(afl, test_target_path);
 
-  read_loc2bbs(afl, argv[optind]);
   read_bb2attributes(afl, argv[optind]);
+  read_loc2bbs(afl, argv[optind]);
   /* end of funafl code */
 
   u64 prev_target_hash = 0;
