@@ -164,7 +164,7 @@ else
 endif
 
 # funafl add cJSON include path
-override CFLAGS += -g -Wno-pointer-sign -Wno-variadic-macros -Wall -Wextra -Wno-pointer-arith \
+override CFLAGS += -g -Wno-pointer-sign -Wno-variadic-macros -Wall -Wextra -Wno-pointer-arith -Wno-error=implicit-function-declaration \
 			-fPIC -I include/ -I include/cJSON -DAFL_PATH=\"$(HELPER_PATH)\"  \
 			-DBIN_PATH=\"$(BIN_PATH)\" -DDOC_PATH=\"$(DOC_PATH)\"
 # [Optional]: to debug -O0
