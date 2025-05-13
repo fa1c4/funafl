@@ -35,6 +35,9 @@
 #include "cmplog.h"
 #include "asanfuzz.h"
 
+// funafl header file
+#include "afl-fuzz-fun.h"
+
 #ifdef PROFILING
 u64 time_spent_working = 0;
 #endif

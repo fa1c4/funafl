@@ -27,10 +27,10 @@
 #include <limits.h>
 #include "afl-fuzz.h"
 #include "envs.h"
-// funafl code
+// funafl header file
 #include <float.h>
 #include "afl-fuzz-json.h"
-// funafl code
+
 
 char *power_names[POWER_SCHEDULES_NUM] = {"explore", "mmopt", "exploit",
                                           "fast",    "coe",   "lin",
@@ -75,13 +75,6 @@ static void init_funafl_globals(afl_state_t* afl) {
 
   afl->max_function_trace = 0;
 
-  // afl->record_loc2bbs = (struct loc2bbs*)calloc(1, sizeof(struct loc2bbs));
-  // afl->bb2count = (struct basic_block_count*)calloc(1, sizeof(struct basic_block_count));
-  // afl->bb2attributes = (struct basic_blocks*)calloc(1, sizeof(struct basic_blocks));
-  // if (!afl->record_loc2bbs || !afl->bb2count || !afl->bb2attributes) {
-  //   FATAL("<afl-fuzz> Error: Could not calloc funafl global variables loc2bbs, bb2count, bb2attributes");
-  //   exit(-6);
-  // }
   afl->record_loc2bbs = NULL;
   afl->bb2count = NULL;
   afl->bb2attributes = NULL;

@@ -256,7 +256,7 @@ void funafl_parse_cjson(struct afl_state* afl, cJSON* cjson, int parse_mode) {
                 
                 HASH_FIND_INT(afl->bb2attributes, &loc, bb);
                 if (bb == NULL) {
-                    bb = calloc(1, sizeof(struct basic_blocks));
+                    bb = (struct basic_blocks*)calloc(1, sizeof(struct basic_blocks));
                     bb->bb_random = loc;
                     HASH_ADD_INT(afl->bb2attributes, bb_random, bb);
                     add_bb_count_key(afl, loc);
@@ -447,7 +447,7 @@ struct score_union* get_score_by_bb(struct afl_state* afl, int bb_loc) {
     }
 
     add_bb_count(afl, bb_loc);
-    struct score_union* sc = calloc(1, sizeof(struct score_union));
+    struct score_union* sc = (struct score_union*)calloc(1, sizeof(struct score_union));
     sc->seed_score = cur_bb->score_seed;
     sc->energy_score = cur_bb->score_energy;
 
@@ -496,7 +496,7 @@ struct score_union* funafl_get_score_with_loc_and_update_function_count(struct a
     }
 
     // update score
-    struct score_union* res = calloc(1, sizeof(struct score_union));
+    struct score_union* res = (struct score_union*)calloc(1, sizeof(struct score_union));
     // calculate average score for seed and energy
     res->seed_score = bb_num == 0?
                         afl->average_score:

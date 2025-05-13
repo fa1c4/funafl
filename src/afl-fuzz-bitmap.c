@@ -597,12 +597,8 @@ u8 __attribute__((hot)) save_if_interesting(afl_state_t *afl, void *mem,
 
         len = write_to_testcase(afl, &mem, len, 0);
         
-        // san_fault = fuzz_run_target(afl, &afl->san_fsrvs[san_idx],
-        //                             afl->san_fsrvs[san_idx].exec_tmout);
-        /* funafl code */
-        san_fault = funafl_fuzz_run_target(afl, &afl->san_fsrvs[san_idx],
+        san_fault = fuzz_run_target(afl, &afl->san_fsrvs[san_idx],
                                     afl->san_fsrvs[san_idx].exec_tmout);
-        /* end of funafl code */
 
         // DEBUGF("ASAN Result: %hhd\n", asan_fault);
 
@@ -876,10 +872,7 @@ may_save_fault:
 
         }
 
-        // new_fault = fuzz_run_target(afl, &afl->fsrv, afl->hang_tmout);
-        /* funafl code */
-        new_fault = funafl_fuzz_run_target(afl, &afl->fsrv, afl->hang_tmout);
-        /* end of funafl code */
+        new_fault = fuzz_run_target(afl, &afl->fsrv, afl->hang_tmout);
         
         classify_counts(&afl->fsrv);
 

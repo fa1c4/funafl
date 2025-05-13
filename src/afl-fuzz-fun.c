@@ -9,6 +9,7 @@
 #include "afl-fuzz-fun.h"
 #include "afl-fuzz-json.h"
 #include "cmplog.h"
+#include "config.h"
 
 
 u32 hashArray(u32* key,u32 start, u32 len, u32 seed, u32 range) {
@@ -188,7 +189,7 @@ u8 funafl_has_new_bits(afl_state_t *afl, u8* virgin_map) {
         trace_flag = false;
         funafl_get_trace_bits_set_bits(afl);
     } else {
-        memset(afl->new_tracebit_index, 0, 65536 * sizeof(int));
+        memset(afl->new_tracebit_index, 0, 65536 * sizeof(u32));
         afl->count_new_tracebit_index = 0;
     }
 
@@ -477,8 +478,9 @@ fsrv_run_result_t __attribute__((hot)) funafl_fsrv_run_target(
         /* funafl code */
         memset(fsrv->function_index, 0, FUNC_COUNT * sizeof(u32));
         fsrv->function_index[0] = 0;
-        fsrv->function_index[1] = 3; // <?>
-        fsrv->function_index[2] = 3; // <?>
+        fsrv->function_index[1] = 1; // <?>
+        fsrv->function_index[2] = 2; // <?>
+        /* end of funafl code */
 
         MEM_BARRIER();
 
@@ -490,8 +492,9 @@ fsrv_run_result_t __attribute__((hot)) funafl_fsrv_run_target(
     /* funafl code */
     memset(fsrv->function_index, 0, FUNC_COUNT * sizeof(u32));
     fsrv->function_index[0] = 0;
-    fsrv->function_index[1] = 3; // <?>
-    fsrv->function_index[2] = 3; // <?>
+    fsrv->function_index[1] = 1; // <?>
+    fsrv->function_index[2] = 2; // <?>
+    /* end of funafl code */
     
     MEM_BARRIER();
 #endif
@@ -1094,8 +1097,6 @@ abort_calibration:
 
 }
 
-
-// static u8 funafl_save_if_interesting(afl_state_t *afl, char** argv, void* mem, u32 len, u8 fault);
 
 u8 __attribute__((hot)) funafl_save_if_interesting(afl_state_t *afl, void *mem, u32 len, u8 fault) {
 

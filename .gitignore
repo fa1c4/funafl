@@ -13,6 +13,15 @@ test/test_hello_aflpp.sh
 test/errors
 test/core.*
 
+# custom mutator examples
+custom_mutators/examples/
+
+# nyx_mode
+nyx_mode/QEMU-Nyx/
+nyx_mode/libnyx/
+nyx_mode/packer/
+libnyx.so
+
 # build results
 SanitizerCoverageLTO.so
 SanitizerCoveragePCGUARD.so

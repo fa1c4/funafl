@@ -265,7 +265,11 @@ void afl_fsrv_init(afl_forkserver_t *fsrv) {
 #endif
 
   /* funafl code */
-  fsrv->function_index = NULL;
+  fsrv->function_index = (u32*)calloc(1, FUNC_COUNT * sizeof(u32));
+  if (fsrv->function_index == NULL) {
+    perror("Memory allocation failed using malloc");
+    exit(-16);
+  }
   /* end of funafl code */
 
   fsrv->init_child_func = fsrv_exec_child;

@@ -598,14 +598,6 @@ int main(int argc, char **argv_orig, char **envp) {
   afl_state_t *afl = calloc(1, sizeof(afl_state_t));
   if (!afl) { FATAL("Could not create afl state"); }
 
-  /* funafl code */
-  // initialize funafl global variables
-  long last_modify_t = 0, modify_t = 0;
-  s32 fd;
-  struct stat buf;
-  FILE* new_fp = NULL;
-  /* end of funafl code */
-
   if (get_afl_env("AFL_DEBUG")) { debug = afl->debug = 1; }
 
   afl_state_init(afl, map_size);
@@ -2550,7 +2542,7 @@ int main(int argc, char **argv_orig, char **envp) {
   afl->fsrv.trace_bits =
       afl_shm_init(&afl->shm, afl->fsrv.map_size, afl->non_instrumented_mode);
   /* funafl init function_index */
-  afl->fsrv.function_index = (u32*)(afl->fsrv.trace_bits + afl->fsrv.map_size);
+  // afl->fsrv.function_index = (u32*)(afl->fsrv.trace_bits + afl->fsrv.map_size);
 
   if (!afl->non_instrumented_mode && !afl->fsrv.qemu_mode &&
       !afl->unicorn_mode && !afl->fsrv.frida_mode && !afl->fsrv.cs_mode &&
@@ -2604,7 +2596,7 @@ int main(int argc, char **argv_orig, char **envp) {
       afl->fsrv.trace_bits =
           afl_shm_init(&afl->shm, new_map_size, afl->non_instrumented_mode);
       /* funafl init function_index */
-      afl->fsrv.function_index = (u32*)(afl->fsrv.trace_bits + afl->fsrv.map_size);
+      // afl->fsrv.function_index = (u32*)(afl->fsrv.trace_bits + afl->fsrv.map_size);
 
       setenv("AFL_NO_AUTODICT", "1", 1);  // loaded already
       afl_fsrv_start(&afl->fsrv, afl->argv, &afl->stop_soon,
@@ -2720,7 +2712,7 @@ int main(int argc, char **argv_orig, char **envp) {
         afl->fsrv.trace_bits =
             afl_shm_init(&afl->shm, new_map_size, afl->non_instrumented_mode);
         /* funafl init function_index */
-        afl->fsrv.function_index = (u32*)(afl->fsrv.trace_bits + afl->fsrv.map_size);
+        // afl->fsrv.function_index = (u32*)(afl->fsrv.trace_bits + afl->fsrv.map_size);
   
         ck_free(afl->san_fsrvs[i].trace_bits);
         afl->san_fsrvs[i].trace_bits = ck_alloc(afl->fsrv.map_size + 8);
@@ -2813,7 +2805,7 @@ int main(int argc, char **argv_orig, char **envp) {
       afl->fsrv.trace_bits =
           afl_shm_init(&afl->shm, new_map_size, afl->non_instrumented_mode);
       /* funafl init function_index */
-      afl->fsrv.function_index = (u32*)(afl->fsrv.trace_bits + afl->fsrv.map_size);
+      // afl->fsrv.function_index = (u32*)(afl->fsrv.trace_bits + afl->fsrv.map_size);
 
       afl->cmplog_fsrv.trace_bits = afl->fsrv.trace_bits;
       afl_fsrv_start(&afl->fsrv, afl->argv, &afl->stop_soon,
@@ -3067,10 +3059,6 @@ int main(int argc, char **argv_orig, char **envp) {
   afl->start_time = get_cur_time();
 
   while (likely(!afl->stop_soon)) {
-
-    /* funafl read json */
-
-    /* end of funafl read json */
 
     cull_queue(afl);
 

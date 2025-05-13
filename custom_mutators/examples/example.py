@@ -56,11 +56,8 @@ def fuzz(buf, add_buf, max_size):
     @rtype: bytearray
     @return: A new bytearray containing the mutated data
     """
-    ret = bytearray(100)
-
-    ret[:3] = random.choice(COMMANDS)
-
-    return ret
+    
+    return bytearray(buf[:max_size]) if buf else bytearray(b"A")
 
 
 # Uncomment and implement the following methods if you want to use a custom
