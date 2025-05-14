@@ -75,9 +75,6 @@ static void *unsupported(afl_state_t *afl, unsigned int seed) {
 static size_t fuzz_py(void *py_mutator, u8 *buf, size_t buf_size, u8 **out_buf,
                       u8 *add_buf, size_t add_buf_size, size_t max_size) {
 
-  /* debug code */
-  FATAL("running fuzz_py");
-
   size_t    mutated_size;
   PyObject *py_args, *py_value;
   py_args = PyTuple_New(3);
@@ -143,6 +140,9 @@ static size_t fuzz_py(void *py_mutator, u8 *buf, size_t buf_size, u8 **out_buf,
     }
 
     Py_DECREF(py_value);
+    
+    // fprintf(stderr, "run fuzz_py successfully"); // debug code
+
     return mutated_size;
 
   } else {
@@ -152,8 +152,6 @@ static size_t fuzz_py(void *py_mutator, u8 *buf, size_t buf_size, u8 **out_buf,
 
   }
 
-  /* debug code */
-  FATAL("run fuzz_py successfully");
 
 }
 

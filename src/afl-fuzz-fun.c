@@ -12,7 +12,7 @@
 #include "config.h"
 
 
-u32 hashArray(u32* key,u32 start, u32 len, u32 seed, u32 range) {
+u32 hashArray(u32* key, u32 start, u32 len, u32 seed, u32 range) {
 
   u32 hash_val = 1;
   for(u32 i = 0; i < len; i++) {
@@ -25,9 +25,18 @@ u32 hashArray(u32* key,u32 start, u32 len, u32 seed, u32 range) {
 
 u32 funafl_get_function_trace_hash(afl_state_t *afl) {
 
-    if (afl->fsrv.function_index[0] > 65535) {
-        ACTF("Integer overflow, please check the function index");
-        exit(-1);
+    afl->fsrv.function_index[0] = (afl->fsrv.function_index[0] + 1) % 65536;
+
+    // copy the fsrv.trace_bits to afl->fsrv.function_index
+    u32 index_range = 0;
+    if (FUNC_COUNT - 1 >= sizeof(afl->fsrv.trace_bits) - 1) {
+      index_range = FUNC_COUNT - 1;
+    } else {
+      index_range = sizeof(afl->fsrv.trace_bits) - 1;
+    }
+    
+    for (u32 i = 1; i <= index_range; ++i) {
+      afl->fsrv.function_index[i] = (afl->fsrv.trace_bits + afl->fsrv.map_size)[i];
     }
 
     u32 hash_val = hashArray(afl->fsrv.function_index, 1, 

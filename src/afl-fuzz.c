@@ -3060,6 +3060,8 @@ int main(int argc, char **argv_orig, char **envp) {
 
   while (likely(!afl->stop_soon)) {
 
+    /* funafl todo: updating bb2attributes by reading new files */
+
     cull_queue(afl);
 
     if (unlikely((!afl->old_seed_selection &&
