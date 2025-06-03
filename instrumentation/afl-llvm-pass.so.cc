@@ -528,6 +528,12 @@ bool AFLCoverage::runOnModule(Module &M) {
   int inst_blocks = 0;
   scanForDangerousFunctions(&M);
 
+  /* funafl code */
+  GlobalVariable *AFLFuncHitPtr = new GlobalVariable(
+    M, PointerType::get(Int32Ty, 0), false,
+    GlobalValue::ExternalLinkage, nullptr, "__afl_func_hit_ptr");
+  /* end of funafl code */
+
   for (auto &F : M) {
 
     int has_calls = 0;
@@ -544,6 +550,43 @@ bool AFLCoverage::runOnModule(Module &M) {
 
       BasicBlock::iterator IP = BB.getFirstInsertionPt();
       IRBuilder<>          IRB(&(*IP));
+
+      /* funafl code */
+      if (&BB == &F.getEntryBlock()) {
+
+        LoadInst *AFLFuncHitPtrInst = IRB.CreateLoad(PointerType::get(Int32Ty, 0), AFLFuncHitPtr);
+        AFLFuncHitPtrInst->setMetadata(M.getMDKindID("nosanitize"), MDNode::get(C, None));
+
+        uint64_t fn_hash = F.getGUID() % FUNCHIT_SHM_SIZE;
+        if (debug)
+          fprintf(stderr, "Function %s -> hash = %lu\n", F.getName().str().c_str(), fn_hash);
+
+        ConstantInt *Index = ConstantInt::get(Int32Ty, fn_hash);
+
+        Value *Slot = IRB.CreateGEP(Int32Ty, AFLFuncHitPtrInst, Index);
+        
+        // thread unsafe
+        // LoadInst *OldCount = IRB.CreateLoad(Int32Ty, Slot);
+        // OldCount->setMetadata(M.getMDKindID("nosanitize"), MDNode::get(C, None));
+
+        // Value *NewCount = IRB.CreateAdd(OldCount, ConstantInt::get(Int32Ty, 1));
+        // StoreInst *StoreCount = IRB.CreateStore(NewCount, Slot);
+        // StoreCount->setMetadata(M.getMDKindID("nosanitize"), MDNode::get(C, None));
+      
+        // use monotonic operation to enable threadsafe
+#if LLVM_VERSION_MAJOR >= 11
+        IRB.CreateAtomicRMW(AtomicRMWInst::Add, Slot,
+                            ConstantInt::get(Int32Ty, 1),
+                            MaybeAlign(4),
+                            AtomicOrdering::Monotonic);
+#else
+        IRB.CreateAtomicRMW(AtomicRMWInst::Add, Slot,
+                            ConstantInt::get(Int32Ty, 1),
+                            AtomicOrdering::Monotonic);
+#endif
+
+      }
+      /* end of funafl code */
 
       // Context sensitive coverage
       if (instrument_ctx && &BB == &F.getEntryBlock()) {

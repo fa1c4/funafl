@@ -421,6 +421,9 @@
 /* Environment variable used to pass SHM ID to the called program. */
 
 #define SHM_ENV_VAR "__AFL_SHM_ID"
+/* funafl code */
+#define FUNC_HIT_SHM_ENV_VAR "__AFL_FUNC_HIT_SHM_ID"
+/* end of funafl code */
 
 /* Environment variable used to pass SHM FUZZ ID to the called program. */
 
@@ -487,6 +490,11 @@
 #else
   #define MAP_INITIAL_SIZE MAP_SIZE
 #endif
+
+/* funafl code: extend shm size */
+#define EXTEND_SHM_SIZE (1U << (MAP_SIZE_POW2 + 1))
+#define FUNCHIT_SHM_SIZE (MAP_SIZE * 4) // 65536 * 4 for bigger range
+// #define FUNCHIT_SHM_SIZE MAP_SIZE // 65536 for unsigned int type
 
 /* Maximum allocator request size (keep well under INT_MAX): */
 
@@ -563,7 +571,7 @@
 
 
 /* FunAFL configuration */
-#define FUNC_COUNT 65536
+#define FUNC_COUNT (MAP_SIZE * 4) // 65536 * 4 to decrease collision of hash
 #define TYPE_POS_PAIR 1
 #define TYPE_BOUNDARY 2
 #define LIST_HOLDER "LIST_HEAD"

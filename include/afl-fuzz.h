@@ -884,7 +884,7 @@ typedef struct afl_state {
 
   u32 trace_bits_index_when_new_path_is_added;
   u32 count_new_tracebit_index;
-  u32 new_tracebit_index[65536];
+  u32 new_tracebit_index[FUNC_COUNT];
 
   d64 average_score;
   d64 sum_score;
@@ -896,7 +896,7 @@ typedef struct afl_state {
   d64 max_score;
   d64 min_score;
 
-  u32 global_function_trace[65536];
+  u32 global_function_trace[FUNC_COUNT];
   u32 global_function_trace_count;
   u32 global_function_trace_sum;
   d64 average_function_trace;

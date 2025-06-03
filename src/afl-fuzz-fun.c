@@ -25,23 +25,23 @@ u32 hashArray(u32* key, u32 start, u32 len, u32 seed, u32 range) {
 
 u32 funafl_get_function_trace_hash(afl_state_t *afl) {
 
-    afl->fsrv.function_index[0] = (afl->fsrv.function_index[0] + 1) % 65536;
+    afl->fsrv.function_index[0] = (afl->fsrv.function_index[0] + 1) % FUNC_COUNT;
 
     // copy the fsrv.trace_bits to afl->fsrv.function_index
-    u32 index_range = 0;
-    if (FUNC_COUNT - 1 >= sizeof(afl->fsrv.trace_bits) - 1) {
-      index_range = FUNC_COUNT - 1;
-    } else {
-      index_range = sizeof(afl->fsrv.trace_bits) - 1;
-    }
+    // u32 index_range = 0;
+    // if (FUNC_COUNT - 1 >= sizeof(afl->fsrv.trace_bits) - 1) {
+    //   index_range = FUNC_COUNT - 1;
+    // } else {
+    //   index_range = sizeof(afl->fsrv.trace_bits) - 1;
+    // }
     
-    for (u32 i = 1; i <= index_range; ++i) {
-      afl->fsrv.function_index[i] = (afl->fsrv.trace_bits + afl->fsrv.map_size)[i];
-    }
+    // for (u32 i = 1; i <= index_range; ++i) {
+    //   afl->fsrv.function_index[i] = (afl->fsrv.trace_bits + afl->fsrv.map_size)[i];
+    // }
 
     u32 hash_val = hashArray(afl->fsrv.function_index, 1, 
                               afl->fsrv.function_index[0], 
-                              31, 65536);
+                              31, FUNC_COUNT);
     
     afl->global_function_trace_sum++;
     if (afl->global_function_trace[hash_val] == 0)
@@ -115,7 +115,6 @@ void funafl_print_trace(afl_state_t *afl, const u8* fuzz_out) {
 
 
 void funafl_get_trace_bits_set_bits(afl_state_t *afl) {
-    memset(afl->new_tracebit_index, 0, 65536 * sizeof(int));
     afl->count_new_tracebit_index = 0;
     for (u32 i = 0; i < MAP_SIZE; ++i) {
         if (afl->fsrv.trace_bits[i]) {
@@ -486,9 +485,6 @@ fsrv_run_result_t __attribute__((hot)) funafl_fsrv_run_target(
 
         /* funafl code */
         memset(fsrv->function_index, 0, FUNC_COUNT * sizeof(u32));
-        fsrv->function_index[0] = 0;
-        fsrv->function_index[1] = 1; // <?>
-        fsrv->function_index[2] = 2; // <?>
         /* end of funafl code */
 
         MEM_BARRIER();
@@ -500,9 +496,6 @@ fsrv_run_result_t __attribute__((hot)) funafl_fsrv_run_target(
     
     /* funafl code */
     memset(fsrv->function_index, 0, FUNC_COUNT * sizeof(u32));
-    fsrv->function_index[0] = 0;
-    fsrv->function_index[1] = 1; // <?>
-    fsrv->function_index[2] = 2; // <?>
     /* end of funafl code */
     
     MEM_BARRIER();

@@ -36,7 +36,6 @@ void funafl_update_bitmap_score(afl_state_t *afl, struct queue_entry* q);
 
 // setup_shm 1505-1536
 
-// 2425-2629 comp to afl++ | 2440-2443 function_index
 // u8 funafl_run_target(afl_state_t *afl, char** argv, u32 timeout); 
 fsrv_run_result_t __attribute__((hot)) funafl_fsrv_run_target(afl_forkserver_t *fsrv, u32 timeout, volatile u8 *stop_soon_p);
 
@@ -50,16 +49,8 @@ u8 funafl_calibrate_case(afl_state_t *afl, struct queue_entry* q, u8* use_mem,
 
 u8 __attribute__((hot)) funafl_save_if_interesting(afl_state_t *afl, void *mem, u32 len, u8 fault);
 
-u32 funafl_calculate_score(afl_state_t *afl, struct queue_entry* q); // 4877-4965
-
-// caller 5248
+u32 funafl_calculate_score(afl_state_t *afl, struct queue_entry* q);
 
 // fuzz_one->fuzz_one_original modified locally
-
-// global variable last_modify_t & modify_t modify to main(){}
-
-// main function: init funafl global variables
-// main function: afl-fuzz-json
-// main function: 
 
 #endif // _AFL_FUZZ_FUN_H

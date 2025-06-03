@@ -12,6 +12,7 @@ test/test_hello_aflpp.c
 test/test_hello_aflpp.sh
 test/errors
 test/core.*
+test/fast-test-fun.sh
 
 # custom mutator examples
 custom_mutators/examples/

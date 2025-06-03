@@ -104,6 +104,11 @@ char *strcasestr(const char *haystack, const char *needle);
 static u8  __afl_area_initial[MAP_INITIAL_SIZE];
 static u8 *__afl_area_ptr_dummy = __afl_area_initial;
 static u8 *__afl_area_ptr_backup = __afl_area_initial;
+/* funafl code */
+static u32 __afl_func_hit_initial[FUNCHIT_SHM_SIZE];
+static u32 *__afl_func_hit_ptr_dummy = __afl_func_hit_initial;
+static u32 *__afl_func_hit_ptr_backup = __afl_func_hit_initial;
+/* end of funafl code */
 
 u8        *__afl_area_ptr = __afl_area_initial;
 u8        *__afl_dictionary;
@@ -111,6 +116,9 @@ u8        *__afl_fuzz_ptr;
 static u32 __afl_fuzz_len_dummy;
 u32       *__afl_fuzz_len = &__afl_fuzz_len_dummy;
 int        __afl_sharedmem_fuzzing __attribute__((weak));
+/* funafl code */
+u32 *__afl_func_hit_ptr = __afl_func_hit_initial;
+/* end of funafl code */
 
 u32 __afl_final_loc;
 u32 __afl_map_size = MAP_SIZE;
@@ -217,6 +225,9 @@ u32 __afl_already_initialized_first;
 u32 __afl_already_initialized_second;
 u32 __afl_already_initialized_early;
 u32 __afl_already_initialized_init;
+/* funafl code */
+u32 __afl_already_initialized_funchit;
+/* end of funafl code */
 
 /* Dummy pipe for area_is_valid() */
 
@@ -755,6 +766,57 @@ static void __afl_map_shm(void) {
 
   }
 
+  /* funafl code */
+  // already init func_hit_ptr then return to avoid duplication of init
+  if (__afl_already_initialized_funchit) return;
+  __afl_already_initialized_funchit = 1;
+
+  // assign dummy ptr to func_hit_ptr when is nullptr
+  if (!__afl_func_hit_ptr) { __afl_func_hit_ptr = __afl_func_hit_ptr_dummy; }
+
+  // get FUNC_HIT_SHM from envrionment variable
+  char *func_hit_id_str = getenv(FUNC_HIT_SHM_ENV_VAR);
+
+  if (func_hit_id_str) {
+
+    u32 func_hit_shm_id = atoi(func_hit_id_str);
+
+    __afl_func_hit_ptr = (u32 *)shmat(func_hit_shm_id, NULL, 0);
+
+    if (!__afl_func_hit_ptr || __afl_func_hit_ptr == (void *)-1) {
+      perror("shmat for func_hit");
+      __afl_func_hit_ptr = __afl_func_hit_ptr_dummy;
+      exit(-17);
+    }
+
+    if (__afl_debug) {
+
+      fprintf(stderr, "DEBUG: Received %p via shmat for func_hit\n",
+          __afl_func_hit_ptr);
+
+    }
+
+  } else {
+    fprintf(stderr, "FUNC_HIT_SHM is not allocated or invalid. Did you forget to export __AFL_FUNC_HIT_SHM_ID?\n");
+    perror("shmat func_hit");
+    exit(-18);
+  }
+
+  __afl_func_hit_ptr_backup = __afl_func_hit_ptr;
+
+  if (__afl_debug) {
+
+    fprintf(stderr,
+            "DEBUG: (2) func_hit_id_str %s, __afl_func_hit_ptr %p, __afl_func_hit_initial %p, "
+            "__afl_func_hit_ptr_dummy %p, __afl_map_addr 0x%llx, MAP_SIZE "
+            "%u, __afl_final_loc %u, __afl_map_size %u\n",
+            func_hit_id_str == NULL ? "<null>" : func_hit_id_str, __afl_func_hit_ptr,
+            __afl_func_hit_initial, __afl_func_hit_ptr_dummy, __afl_map_addr, MAP_SIZE,
+            __afl_final_loc, __afl_map_size);
+
+  }
+  /* end of funafl code */
+
 }
 
 /* unmap SHM. */
@@ -818,6 +880,29 @@ static void __afl_unmap_shm(void) {
   }
 
   __afl_already_initialized_shm = 0;
+
+  /* funafl code */
+  if (!__afl_already_initialized_funchit) return; // not mmaped
+
+  if (__afl_func_hit_ptr &&
+      __afl_func_hit_ptr != __afl_func_hit_ptr_dummy &&
+      __afl_func_hit_ptr != __afl_func_hit_initial) {
+
+    if (shmdt((void *)__afl_func_hit_ptr) == -1) {
+      perror("shmdt for __afl_func_hit_ptr");
+    }
+
+    if (__afl_debug) {
+      fprintf(stderr, "DEBUG: Unmapped __afl_func_hit_ptr at %p\n, dummy at %p\n", 
+          __afl_func_hit_ptr, __afl_func_hit_ptr_dummy);
+    }
+
+    __afl_func_hit_ptr = __afl_func_hit_ptr_dummy;
+    __afl_func_hit_ptr_backup = __afl_func_hit_ptr_dummy;
+  }
+
+  __afl_already_initialized_funchit = 0;
+  /* end of funafl */
 
 }
 

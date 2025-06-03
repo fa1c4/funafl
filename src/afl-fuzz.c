@@ -2539,10 +2539,39 @@ int main(int argc, char **argv_orig, char **envp) {
   }
 
   afl->argv = use_argv;
+
+  /* funafl code: extend share memory for function hits information */
+  // afl->fsrv.map_size += EXTEND_SHM_SIZE;
+
+  // use independent share memory allocated be fuzzing instead to avoid coupling
+  char *func_hit_id_str = getenv(FUNC_HIT_SHM_ENV_VAR);
+
+  if (func_hit_id_str) {
+
+    int shm_id = atoi(func_hit_id_str);
+    void *shm_ptr = shmat(shm_id, NULL, 0);
+
+    if (!shm_ptr || shm_ptr == (void *)-1) {
+      perror("shmat for FUNC_HIT_SHM failed");
+      shm_ptr = NULL;
+      exit(-19);
+    }
+
+    afl->fsrv.function_index = (u32 *)shm_ptr;
+
+    if (afl->fsrv.function_index && afl->debug) {
+      ACTF("funafl: attached function_index = %p (shm_id=%d)", afl->fsrv.function_index, shm_id);
+    }
+
+  } else {
+    if (afl->debug)
+      ACTF("funafl: FUNC_HIT_SHM_ENV_VAR not set, function_index disabled.");
+    afl->fsrv.function_index = NULL;
+  }
+  /* end of funafl code */
+
   afl->fsrv.trace_bits =
       afl_shm_init(&afl->shm, afl->fsrv.map_size, afl->non_instrumented_mode);
-  /* funafl init function_index */
-  // afl->fsrv.function_index = (u32*)(afl->fsrv.trace_bits + afl->fsrv.map_size);
 
   if (!afl->non_instrumented_mode && !afl->fsrv.qemu_mode &&
       !afl->unicorn_mode && !afl->fsrv.frida_mode && !afl->fsrv.cs_mode &&
@@ -2595,8 +2624,6 @@ int main(int argc, char **argv_orig, char **envp) {
       afl->fsrv.map_size = new_map_size;
       afl->fsrv.trace_bits =
           afl_shm_init(&afl->shm, new_map_size, afl->non_instrumented_mode);
-      /* funafl init function_index */
-      // afl->fsrv.function_index = (u32*)(afl->fsrv.trace_bits + afl->fsrv.map_size);
 
       setenv("AFL_NO_AUTODICT", "1", 1);  // loaded already
       afl_fsrv_start(&afl->fsrv, afl->argv, &afl->stop_soon,
@@ -2711,8 +2738,6 @@ int main(int argc, char **argv_orig, char **envp) {
         setenv("AFL_NO_AUTODICT", "1", 1);  // loaded already
         afl->fsrv.trace_bits =
             afl_shm_init(&afl->shm, new_map_size, afl->non_instrumented_mode);
-        /* funafl init function_index */
-        // afl->fsrv.function_index = (u32*)(afl->fsrv.trace_bits + afl->fsrv.map_size);
   
         ck_free(afl->san_fsrvs[i].trace_bits);
         afl->san_fsrvs[i].trace_bits = ck_alloc(afl->fsrv.map_size + 8);
@@ -2804,8 +2829,6 @@ int main(int argc, char **argv_orig, char **envp) {
       setenv("AFL_NO_AUTODICT", "1", 1);  // loaded already
       afl->fsrv.trace_bits =
           afl_shm_init(&afl->shm, new_map_size, afl->non_instrumented_mode);
-      /* funafl init function_index */
-      // afl->fsrv.function_index = (u32*)(afl->fsrv.trace_bits + afl->fsrv.map_size);
 
       afl->cmplog_fsrv.trace_bits = afl->fsrv.trace_bits;
       afl_fsrv_start(&afl->fsrv, afl->argv, &afl->stop_soon,
@@ -3631,6 +3654,14 @@ stop_fuzzing:
   destroy_extras(afl);
   destroy_custom_mutators(afl);
   afl_shm_deinit(&afl->shm);
+  /* funafl code */
+  if (afl->fsrv.function_index) {
+
+    shmdt(afl->fsrv.function_index);
+    afl->fsrv.function_index = NULL;
+
+  }
+  /* end of funafl code */
 
   if (afl->shm_fuzz) {
 
