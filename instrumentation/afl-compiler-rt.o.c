@@ -105,7 +105,8 @@ static u8  __afl_area_initial[MAP_INITIAL_SIZE];
 static u8 *__afl_area_ptr_dummy = __afl_area_initial;
 static u8 *__afl_area_ptr_backup = __afl_area_initial;
 /* funafl code */
-static u32 __afl_func_hit_initial[FUNCHIT_SHM_SIZE];
+// static u32 __afl_func_hit_initial[FUNC_HIT_SHM_SIZE];
+u32 __afl_func_hit_initial[FUNC_HIT_SHM_SIZE];
 static u32 *__afl_func_hit_ptr_dummy = __afl_func_hit_initial;
 static u32 *__afl_func_hit_ptr_backup = __afl_func_hit_initial;
 /* end of funafl code */

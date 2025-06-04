@@ -493,8 +493,8 @@
 
 /* funafl code: extend shm size */
 #define EXTEND_SHM_SIZE (1U << (MAP_SIZE_POW2 + 1))
-#define FUNCHIT_SHM_SIZE (MAP_SIZE * 4) // 65536 * 4 for bigger range
-// #define FUNCHIT_SHM_SIZE MAP_SIZE // 65536 for unsigned int type
+// #define FUNC_HIT_SHM_SIZE (MAP_SIZE * 4) // 65536 * 4 for bigger range
+#define FUNC_HIT_SHM_SIZE MAP_SIZE // 65536 for unsigned int type
 
 /* Maximum allocator request size (keep well under INT_MAX): */
 

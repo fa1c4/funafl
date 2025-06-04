@@ -422,6 +422,20 @@ bool AFLCoverage::runOnModule(Module &M) {
   GlobalVariable *AFLMapPtr =
       new GlobalVariable(M, PointerType::get(Int8Ty, 0), false,
                          GlobalValue::ExternalLinkage, 0, "__afl_area_ptr");
+  
+  /* funafl code */
+  GlobalVariable *AFLFuncHitPtr = new GlobalVariable(
+    M, PointerType::get(Int32Ty, 0), false,
+    GlobalValue::ExternalLinkage, 0, "__afl_func_hit_ptr");
+
+  fprintf(stderr, "AFLFuncHitPtr is: %p\n", AFLFuncHitPtr);
+  if (AFLFuncHitPtr) {
+      fprintf(stderr, "AFLFuncHitPtr successfully created at address: %p\n", AFLFuncHitPtr);
+  } else {
+      fprintf(stderr, "Failed to create AFLFuncHitPtr\n");
+  }
+  /* end of funafl code */
+  
   GlobalVariable *AFLPrevLoc;
   GlobalVariable *AFLPrevCaller;
   GlobalVariable *AFLContext = NULL;
@@ -528,20 +542,61 @@ bool AFLCoverage::runOnModule(Module &M) {
   int inst_blocks = 0;
   scanForDangerousFunctions(&M);
 
-  /* funafl code */
-  GlobalVariable *AFLFuncHitPtr = new GlobalVariable(
-    M, PointerType::get(Int32Ty, 0), false,
-    GlobalValue::ExternalLinkage, nullptr, "__afl_func_hit_ptr");
-  /* end of funafl code */
+  /* 
+  // funafl code
+  for (auto &F : M) {
+
+    auto BBF = &F.getEntryBlock();
+    BasicBlock::iterator IPF = BBF->getFirstInsertionPt();
+    IRBuilder<> IRBF(&(*IPF)); 
+
+    fprintf(stderr, "Inserting __afl_func_hit_ptr for function: %s\n", F.getName().str().c_str());
+
+    LoadInst *AFLFuncHitPtrInst = IRBF.CreateLoad(PointerType::get(Int32Ty, 0), AFLFuncHitPtr);
+    AFLFuncHitPtrInst->setMetadata(M.getMDKindID("nosanitize"), MDNode::get(C, None));
+
+    uint64_t fn_hash = F.getGUID() % FUNC_HIT_SHM_SIZE;
+    if (debug)
+      fprintf(stderr, "Function %s -> hash = %lu\n", F.getName().str().c_str(), fn_hash);
+
+    ConstantInt *Index = ConstantInt::get(Int32Ty, fn_hash);
+
+    Value *Slot = IRBF.CreateGEP(Int32Ty, AFLFuncHitPtrInst, Index);
+    
+    // thread unsafe
+    LoadInst *OldCount = IRBF.CreateLoad(Int32Ty, Slot);
+    OldCount->setMetadata(M.getMDKindID("nosanitize"), MDNode::get(C, None));
+
+    Value *NewCount = IRBF.CreateAdd(OldCount, ConstantInt::get(Int32Ty, 1));
+    StoreInst *StoreCount = IRBF.CreateStore(NewCount, Slot);
+    StoreCount->setMetadata(M.getMDKindID("nosanitize"), MDNode::get(C, None));
+  
+    // use monotonic operation to enable threadsafe
+    // #if LLVM_VERSION_MAJOR >= 11
+    //     IRBF.CreateAtomicRMW(AtomicRMWInst::Add, Slot,
+    //                         ConstantInt::get(Int32Ty, 1),
+    //                         MaybeAlign(4),
+    //                         AtomicOrdering::Monotonic);
+    // #else
+    //     IRBF.CreateAtomicRMW(AtomicRMWInst::Add, Slot,
+    //                         ConstantInt::get(Int32Ty, 1),
+    //                         AtomicOrdering::Monotonic);
+    // #endif
+  }
+  // end of funafl code
+  */
 
   for (auto &F : M) {
 
     int has_calls = 0;
+    int fun_inst_cnt = 0;
     if (debug)
-      fprintf(stderr, "FUNCTION: %s (%zu)\n", F.getName().str().c_str(),
-              F.size());
+      fprintf(stderr, "FUNCTION: %s (%zu)\n", F.getName().str().c_str(), F.size());
 
-    if (!isInInstrumentList(&F, MNAME)) { continue; }
+    if (!isInInstrumentList(&F, MNAME)) { 
+      fprintf(stderr, "Skipping function %s\n", F.getName().str().c_str());
+      continue; 
+    }
 
     if (F.size() < function_minimum_size) { continue; }
 
@@ -550,43 +605,6 @@ bool AFLCoverage::runOnModule(Module &M) {
 
       BasicBlock::iterator IP = BB.getFirstInsertionPt();
       IRBuilder<>          IRB(&(*IP));
-
-      /* funafl code */
-      if (&BB == &F.getEntryBlock()) {
-
-        LoadInst *AFLFuncHitPtrInst = IRB.CreateLoad(PointerType::get(Int32Ty, 0), AFLFuncHitPtr);
-        AFLFuncHitPtrInst->setMetadata(M.getMDKindID("nosanitize"), MDNode::get(C, None));
-
-        uint64_t fn_hash = F.getGUID() % FUNCHIT_SHM_SIZE;
-        if (debug)
-          fprintf(stderr, "Function %s -> hash = %lu\n", F.getName().str().c_str(), fn_hash);
-
-        ConstantInt *Index = ConstantInt::get(Int32Ty, fn_hash);
-
-        Value *Slot = IRB.CreateGEP(Int32Ty, AFLFuncHitPtrInst, Index);
-        
-        // thread unsafe
-        // LoadInst *OldCount = IRB.CreateLoad(Int32Ty, Slot);
-        // OldCount->setMetadata(M.getMDKindID("nosanitize"), MDNode::get(C, None));
-
-        // Value *NewCount = IRB.CreateAdd(OldCount, ConstantInt::get(Int32Ty, 1));
-        // StoreInst *StoreCount = IRB.CreateStore(NewCount, Slot);
-        // StoreCount->setMetadata(M.getMDKindID("nosanitize"), MDNode::get(C, None));
-      
-        // use monotonic operation to enable threadsafe
-#if LLVM_VERSION_MAJOR >= 11
-        IRB.CreateAtomicRMW(AtomicRMWInst::Add, Slot,
-                            ConstantInt::get(Int32Ty, 1),
-                            MaybeAlign(4),
-                            AtomicOrdering::Monotonic);
-#else
-        IRB.CreateAtomicRMW(AtomicRMWInst::Add, Slot,
-                            ConstantInt::get(Int32Ty, 1),
-                            AtomicOrdering::Monotonic);
-#endif
-
-      }
-      /* end of funafl code */
 
       // Context sensitive coverage
       if (instrument_ctx && &BB == &F.getEntryBlock()) {
@@ -943,7 +961,37 @@ bool AFLCoverage::runOnModule(Module &M) {
 
       inst_blocks++;
 
-    }
+      /* funafl code */
+      if (fun_inst_cnt == 0) {
+        BasicBlock::iterator IPF = BB.getFirstInsertionPt();
+        IRBuilder<> IRBF(&(*IPF));
+    
+        fprintf(stderr, "Inserting __afl_func_hit_ptr for function: %s\n", F.getName().str().c_str());
+    
+        LoadInst *AFLFuncHitPtrInst = IRBF.CreateLoad(PointerType::get(Int32Ty, 0), AFLFuncHitPtr);
+        AFLFuncHitPtrInst->setMetadata(M.getMDKindID("nosanitize"), MDNode::get(C, None));
+    
+        uint64_t fn_hash = F.getGUID() % FUNC_HIT_SHM_SIZE;
+        if (debug)
+          fprintf(stderr, "Function %s -> hash = %lu\n", F.getName().str().c_str(), fn_hash);
+    
+        ConstantInt *Index = ConstantInt::get(Int32Ty, fn_hash);
+    
+        Value *Slot = IRBF.CreateGEP(Int32Ty, AFLFuncHitPtrInst, Index);
+        
+        // thread unsafe
+        LoadInst *OldCount = IRBF.CreateLoad(Int32Ty, Slot);
+        OldCount->setMetadata(M.getMDKindID("nosanitize"), MDNode::get(C, None));
+    
+        Value *NewCount = IRBF.CreateAdd(OldCount, ConstantInt::get(Int32Ty, 1));
+        StoreInst *StoreCount = IRBF.CreateStore(NewCount, Slot);
+        StoreCount->setMetadata(M.getMDKindID("nosanitize"), MDNode::get(C, None));
+
+        fun_inst_cnt++;
+      }
+      /* end of funafl code */
+
+    } // end of for (auto &BB : F)
 
 #if 0
     if (use_threadsafe_counters) {                       /*Atomic NeverZero */
