@@ -14,6 +14,9 @@ test/errors
 test/core.*
 test/fast-test-fun.sh
 
+# environment file
+fun_env.sh
+
 # custom mutator examples
 custom_mutators/examples/
 

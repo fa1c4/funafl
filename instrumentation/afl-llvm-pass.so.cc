@@ -424,15 +424,16 @@ bool AFLCoverage::runOnModule(Module &M) {
                          GlobalValue::ExternalLinkage, 0, "__afl_area_ptr");
   
   /* funafl code */
-  GlobalVariable *AFLFuncHitPtr = new GlobalVariable(
+  static GlobalVariable *AFLFuncHitPtr = NULL;
+  AFLFuncHitPtr = new GlobalVariable(
     M, PointerType::get(Int32Ty, 0), false,
     GlobalValue::ExternalLinkage, 0, "__afl_func_hit_ptr");
 
-  fprintf(stderr, "AFLFuncHitPtr is: %p\n", AFLFuncHitPtr);
   if (AFLFuncHitPtr) {
       fprintf(stderr, "AFLFuncHitPtr successfully created at address: %p\n", AFLFuncHitPtr);
   } else {
       fprintf(stderr, "Failed to create AFLFuncHitPtr\n");
+      exit(-20);
   }
   /* end of funafl code */
   
@@ -543,7 +544,7 @@ bool AFLCoverage::runOnModule(Module &M) {
   scanForDangerousFunctions(&M);
 
   /* 
-  // funafl code
+  // old version funafl code
   for (auto &F : M) {
 
     auto BBF = &F.getEntryBlock();
@@ -589,7 +590,7 @@ bool AFLCoverage::runOnModule(Module &M) {
   for (auto &F : M) {
 
     int has_calls = 0;
-    int fun_inst_cnt = 0;
+    int fun_inst_cnt = 0; // funafl code 
     if (debug)
       fprintf(stderr, "FUNCTION: %s (%zu)\n", F.getName().str().c_str(), F.size());
 
@@ -965,8 +966,8 @@ bool AFLCoverage::runOnModule(Module &M) {
       if (fun_inst_cnt == 0) {
         BasicBlock::iterator IPF = BB.getFirstInsertionPt();
         IRBuilder<> IRBF(&(*IPF));
-    
-        fprintf(stderr, "Inserting __afl_func_hit_ptr for function: %s\n", F.getName().str().c_str());
+        if (debug)
+          fprintf(stderr, "Inserting __afl_func_hit_ptr for function: %s\n", F.getName().str().c_str());
     
         LoadInst *AFLFuncHitPtrInst = IRBF.CreateLoad(PointerType::get(Int32Ty, 0), AFLFuncHitPtr);
         AFLFuncHitPtrInst->setMetadata(M.getMDKindID("nosanitize"), MDNode::get(C, None));
@@ -982,9 +983,15 @@ bool AFLCoverage::runOnModule(Module &M) {
         // thread unsafe
         LoadInst *OldCount = IRBF.CreateLoad(Int32Ty, Slot);
         OldCount->setMetadata(M.getMDKindID("nosanitize"), MDNode::get(C, None));
-    
+
+        // cmp with FUNC_COUNT less then increment 1, greater then remain
+        ConstantInt *MaxCount = ConstantInt::get(Int32Ty, UINT32_MAX);
+        Value *IsLessThanMax = IRBF.CreateICmpULT(OldCount, MaxCount);
         Value *NewCount = IRBF.CreateAdd(OldCount, ConstantInt::get(Int32Ty, 1));
-        StoreInst *StoreCount = IRBF.CreateStore(NewCount, Slot);
+        Value *FinalCount = IRBF.CreateSelect(IsLessThanMax, NewCount, OldCount);
+    
+        // Store result
+        StoreInst *StoreCount = IRBF.CreateStore(FinalCount, Slot);
         StoreCount->setMetadata(M.getMDKindID("nosanitize"), MDNode::get(C, None));
 
         fun_inst_cnt++;

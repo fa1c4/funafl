@@ -2482,6 +2482,8 @@ int main(int argc, char **argv_orig, char **envp) {
 
   if (afl->shmem_testcase_mode) { setup_testcase_shmem(afl); }
 
+  setup_func_hit_shmem(afl); /* funafl code: setup the shm for func_hit_map */
+
   afl->start_time = get_cur_time();
 
   if (afl->fsrv.qemu_mode) {
@@ -2540,10 +2542,9 @@ int main(int argc, char **argv_orig, char **envp) {
 
   afl->argv = use_argv;
 
-  /* funafl code: extend share memory for function hits information */
-  // afl->fsrv.map_size += EXTEND_SHM_SIZE;
-
-  // use independent share memory allocated be fuzzing instead to avoid coupling
+  /* funafl code: allocat share memory for function hits information */
+  /*
+  // PATH 1: use independent share memory allocated be fuzzing instead to avoid coupling
   char *func_hit_id_str = getenv(FUNC_HIT_SHM_ENV_VAR);
 
   if (func_hit_id_str) {
@@ -2557,17 +2558,25 @@ int main(int argc, char **argv_orig, char **envp) {
       exit(-19);
     }
 
-    afl->fsrv.function_index = (u32 *)shm_ptr;
+    afl->fsrv.func_hit_map = (u32 *)shm_ptr;
 
-    if (afl->fsrv.function_index && afl->debug) {
-      ACTF("funafl: attached function_index = %p (shm_id=%d)", afl->fsrv.function_index, shm_id);
+    if (afl->fsrv.func_hit_map && afl->debug) {
+      ACTF("funafl: attached func_hit_map = %p (shm_id=%d)", afl->fsrv.func_hit_map, shm_id);
     }
 
   } else {
     if (afl->debug)
-      ACTF("funafl: FUNC_HIT_SHM_ENV_VAR not set, function_index disabled.");
-    afl->fsrv.function_index = NULL;
+      ACTF("funafl: FUNC_HIT_SHM_ENV_VAR not set, func_hit_map disabled.");
+    afl->fsrv.func_hit_map = NULL;
   }
+  */
+
+  // PATH 2: appending bit_map size to store func_hit_map 
+  // afl->fsrv.map_size += EXTEND_SHM_SIZE;
+
+  // PATH 3: use afl_shm_int to allocat independent share memory
+
+
   /* end of funafl code */
 
   afl->fsrv.trace_bits =
@@ -3655,11 +3664,20 @@ stop_fuzzing:
   destroy_custom_mutators(afl);
   afl_shm_deinit(&afl->shm);
   /* funafl code */
-  if (afl->fsrv.function_index) {
+  // PATH 2: allocate independent shm from third way
+  /*
+  if (afl->fsrv.func_hit_map) {
 
-    shmdt(afl->fsrv.function_index);
-    afl->fsrv.function_index = NULL;
+    shmdt(afl->fsrv.func_hit_map);
+    afl->fsrv.func_hit_map = NULL;
 
+  }
+  */
+
+  // PATH 3: allocate indenpendent shm by afl_shm_init() and call afl_shm_deinit() to free it
+  if (afl->shm_func_hit) {
+    afl_shm_deinit(afl->shm_func_hit);
+    ck_free(afl->shm_func_hit);
   }
   /* end of funafl code */
 

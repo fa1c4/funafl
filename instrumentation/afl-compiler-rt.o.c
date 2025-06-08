@@ -104,12 +104,10 @@ char *strcasestr(const char *haystack, const char *needle);
 static u8  __afl_area_initial[MAP_INITIAL_SIZE];
 static u8 *__afl_area_ptr_dummy = __afl_area_initial;
 static u8 *__afl_area_ptr_backup = __afl_area_initial;
-/* funafl code */
-// static u32 __afl_func_hit_initial[FUNC_HIT_SHM_SIZE];
-u32 __afl_func_hit_initial[FUNC_HIT_SHM_SIZE];
-static u32 *__afl_func_hit_ptr_dummy = __afl_func_hit_initial;
-static u32 *__afl_func_hit_ptr_backup = __afl_func_hit_initial;
-/* end of funafl code */
+// static u32 __afl_func_hit_initial[FUNC_HIT_SHM_SIZE]; /* funafl code: static maybe bug */
+u32 __afl_func_hit_initial[FUNC_HIT_SHM_SIZE]; /* funafl code: init array for func_hit */
+static u32 *__afl_func_hit_ptr_dummy = __afl_func_hit_initial; /* funafl code: dummy func_hit */
+static u32 *__afl_func_hit_ptr_backup = __afl_func_hit_initial; /* funafl code: backup func_hit */
 
 u8        *__afl_area_ptr = __afl_area_initial;
 u8        *__afl_dictionary;
@@ -117,9 +115,10 @@ u8        *__afl_fuzz_ptr;
 static u32 __afl_fuzz_len_dummy;
 u32       *__afl_fuzz_len = &__afl_fuzz_len_dummy;
 int        __afl_sharedmem_fuzzing __attribute__((weak));
-/* funafl code */
-u32 *__afl_func_hit_ptr = __afl_func_hit_initial;
-/* end of funafl code */
+// u32 *__afl_func_hit_ptr = __afl_func_hit_initial; /* funafl code: original */
+/* funafl code: set visibility */
+u32 *__afl_func_hit_ptr __attribute__((used, visibility("default"))) = __afl_func_hit_initial; 
+
 
 u32 __afl_final_loc;
 u32 __afl_map_size = MAP_SIZE;
@@ -226,9 +225,7 @@ u32 __afl_already_initialized_first;
 u32 __afl_already_initialized_second;
 u32 __afl_already_initialized_early;
 u32 __afl_already_initialized_init;
-/* funafl code */
-u32 __afl_already_initialized_funchit;
-/* end of funafl code */
+u32 __afl_already_initialized_funchit; /* funafl code: flag to mark func_hit init already */
 
 /* Dummy pipe for area_is_valid() */
 
@@ -797,11 +794,11 @@ static void __afl_map_shm(void) {
 
     }
 
-  } else {
+  } /* else {
     fprintf(stderr, "FUNC_HIT_SHM is not allocated or invalid. Did you forget to export __AFL_FUNC_HIT_SHM_ID?\n");
     perror("shmat func_hit");
     exit(-18);
-  }
+  } */
 
   __afl_func_hit_ptr_backup = __afl_func_hit_ptr;
 

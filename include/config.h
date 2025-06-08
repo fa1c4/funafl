@@ -421,9 +421,8 @@
 /* Environment variable used to pass SHM ID to the called program. */
 
 #define SHM_ENV_VAR "__AFL_SHM_ID"
-/* funafl code */
-#define FUNC_HIT_SHM_ENV_VAR "__AFL_FUNC_HIT_SHM_ID"
-/* end of funafl code */
+
+#define FUNC_HIT_SHM_ENV_VAR "__AFL_FUNC_HIT_SHM_ID" /* funafl function hit share memory environment variable */
 
 /* Environment variable used to pass SHM FUZZ ID to the called program. */
 
@@ -492,7 +491,7 @@
 #endif
 
 /* funafl code: extend shm size */
-#define EXTEND_SHM_SIZE (1U << (MAP_SIZE_POW2 + 1))
+// #define EXTEND_SHM_SIZE (1U << (MAP_SIZE_POW2 + 1))
 // #define FUNC_HIT_SHM_SIZE (MAP_SIZE * 4) // 65536 * 4 for bigger range
 #define FUNC_HIT_SHM_SIZE MAP_SIZE // 65536 for unsigned int type
 
@@ -571,12 +570,12 @@
 
 
 /* FunAFL configuration */
-#define FUNC_COUNT (MAP_SIZE * 4) // 65536 * 4 to decrease collision of hash
+// #define FUNC_COUNT (MAP_SIZE * 4) // 65536 * 4 to decrease collision of hash
+#define FUNC_COUNT FUNC_HIT_SHM_SIZE // 65536 max functions
 #define TYPE_POS_PAIR 1
 #define TYPE_BOUNDARY 2
 #define LIST_HOLDER "LIST_HEAD"
-// FunAFL attributes number is 7
-#define ATTRIBUTES_NUMBER 7
+#define ATTRIBUTES_NUMBER 7 // FunAFL attributes number is 7
 #define TIME_DIFF 8 * 60 * 1000
 #define DURATION 50 * 1000
 #define JSON_READ_RETRY 6

@@ -2904,6 +2904,39 @@ void setup_testcase_shmem(afl_state_t *afl) {
 
 }
 
+/* funafl code */
+void setup_func_hit_shmem(afl_state_t *afl) {
+  
+  afl->shm_func_hit = ck_alloc(sizeof(sharedmem_t));
+  
+  // Initialize shared memory for function hit counts
+  // Size is FUNC_HIT_SHM_SIZE * sizeof(u32)
+  u32 *func_hit_map = (u32 *)afl_shm_init(afl->shm_func_hit, 
+                                          (FUNC_HIT_SHM_SIZE + 1) * sizeof(u32), 0); // 0 = instrumented mode
+  
+  if (!func_hit_map) { 
+    FATAL("BUG: Zero return from afl_shm_init for function hit counts."); 
+  }
+
+  // Set environment variable for the runtime to find the shared memory
+#ifdef USEMMAP
+  setenv(FUNC_HIT_SHM_ENV_VAR, afl->shm_func_hit->g_shm_file_path, 1);
+#else
+  u8 *shm_str = alloc_printf("%d", afl->shm_func_hit->shm_id);
+  setenv(FUNC_HIT_SHM_ENV_VAR, shm_str, 1);
+  ck_free(shm_str);
+#endif
+
+  // Store reference for later use
+  afl->fsrv.func_hit_map_len = (u32 *)func_hit_map;
+  afl->fsrv.func_hit_map = (u32 *)func_hit_map + 1;
+
+  if (afl->debug) {
+    SAYF("Function hit shared memory initialized: %p\n", func_hit_map);
+  }
+}
+/* end of funafl code */
+
 /* Do a PATH search and find target binary to see that it exists and
    isn't a shell script - a common and painful mistake. We also check for
    a valid ELF header and for evidence of AFL instrumentation. */
