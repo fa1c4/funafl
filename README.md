@@ -34,6 +34,27 @@ run the IDAPro scripts `static/acg_extract.py` and `static/loc2bbs_funtions.py` 
 > version tested: IDAPro=7.7, Python=3.8
 
 ## Running evaluation
+### FuzzBench
+copy the `integration/fuzzbench` to FuzzBench `fuzzbench/fuzzers/funafl` then run the evaluation of funafl 
+and completed static analysis and put the results data to `fuzzbench/funzzers/funafl/aicfg`
+```shell
+git clone https://github.com/google/fuzzbench
+cd fuzzbench/fuzzers
+mkdir funafl
+cp /path/to/funafl/integration/fuzzbench/* ./funafl
+
+cd ../ && make install-dependencies
+make presubmit
+
+# require python3 environment
+source .venv/bin/activate
+
+PYTHONPATH=. python3 experiment/run_experiment.py \
+--experiment-config exper_config.yaml \
+--benchmarks zlib_zlib_uncompress_fuzzer \
+--experiment-name funexp \
+--fuzzers funafl
+```
 
 
 <!-- </details>
