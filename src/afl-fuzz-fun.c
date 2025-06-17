@@ -118,7 +118,7 @@ void funafl_get_trace_bits_set_bits(afl_state_t *afl) {
     afl->count_new_tracebit_index = 0;
     for (u32 i = 0; i < MAP_SIZE; ++i) {
         if (afl->fsrv.trace_bits[i]) {
-            if (afl->count_new_tracebit_index >= 65536) {
+            if (afl->count_new_tracebit_index >= FUNC_COUNT) {
                 printf("The number of new trace bits exceeds 65536, please check the code\n");
                 exit(-1);
             }    

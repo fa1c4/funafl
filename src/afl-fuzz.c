@@ -33,6 +33,9 @@
 #include "afl-fuzz-json.h" /* afl-fuzz-json include list.h */
 #include "afl-fuzz-fun.h" /* FunAFL header*/
 
+#include <signal.h> /* funafl header */
+#include <libgen.h> /* funafl header */
+
 #include <limits.h>
 #include <stdlib.h>
 #ifndef USEMMAP
@@ -112,6 +115,21 @@
 #ifdef PROFILING
 extern u64 time_spent_working;
 #endif
+
+/* funafl code */
+static volatile sig_atomic_t attributes_updating_flag = 0;
+
+static void update_signal_handler(int sig) {
+  if (sig == SIGUSR1) {
+    attributes_updating_flag = 1;
+    SAYF("[+] Received SIGUSR1: triggering attribute reload\n");
+  }
+}
+
+void init_dynamic_update_signal(void) {
+  signal(SIGUSR1, update_signal_handler);
+}
+/* end of funafl code */
 
 static void at_exit() {
 
@@ -3088,11 +3106,18 @@ int main(int argc, char **argv_orig, char **envp) {
   #endif
 
   // real start time, we reset, so this works correctly with -V
+  init_dynamic_update_signal(); // funafl code
   afl->start_time = get_cur_time();
 
   while (likely(!afl->stop_soon)) {
 
-    /* funafl todo: updating bb2attributes by reading new files */
+    /* funafl code: updating bb2attributes by reading new files */
+    if (attributes_updating_flag) {
+      read_bb2attributes_dynamic(afl, argv[optind]);
+      attributes_updating_flag = 0;
+      ACTF("Attributes updated, continuing with new weights");
+    }
+    /* end of funafl code */
 
     cull_queue(afl);
 

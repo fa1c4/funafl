@@ -28,13 +28,13 @@ struct score_union {
 };
 
 struct basic_block_count {
-    int bb_random;
-    int count;
+    uint32_t bb_loc;
+    uint32_t count;
     UT_hash_handle hh;
 };
 
 struct basic_blocks {
-    int bb_random;
+    uint32_t bb_loc;
     double attributes_seed[ATTRIBUTES_NUMBER];
     double attributes_energy[ATTRIBUTES_NUMBER];
     double score_seed;
@@ -45,9 +45,9 @@ struct basic_blocks {
 extern list_t bbs_list;
 
 struct loc2bbs {
-    int loc;
-    int length;
-    int bbs[256];
+    uint32_t loc;
+    uint32_t length;
+    uint32_t bbs[BB_MAX_COUNT];
     UT_hash_handle hh;
 };
 
@@ -59,7 +59,7 @@ char *read_info_file(u8 *input_name);
 
 int double_is_equal(double d1, double d2);
 
-void add_bb_count_key(struct afl_state* afl, int bb_random_val);
+void add_bb_count_key(struct afl_state* afl, uint32_t bb_loc_val);
 
 void parse_content(struct afl_state* afl, char *content, int parse_mode);
 
@@ -71,7 +71,7 @@ void print_loc2bbs(struct loc2bbs *loc2bb);
 
 void read_bb2attributes(struct afl_state* afl, u8* target_path);
 
-void read_bb2attributes_not_first(struct afl_state* afl, u8 *base_name, u8 *fuzz_out);
+void read_bb2attributes_dynamic(struct afl_state* afl, u8* target_path);
 
 void print_bb2attributes(struct basic_blocks *bbs);
 
@@ -79,11 +79,11 @@ void print_bb2attributes_not_first(struct basic_blocks *bbs);
 
 void write_bb_count(struct afl_state* afl, u8 *base_name);
 
-void add_bb_count(struct afl_state* afl, int bb);
+void add_bb_count(struct afl_state* afl, uint32_t bb);
 
-struct score_union* get_score_by_bb(struct afl_state* afl, int bb);
+struct score_union* get_score_by_bb(struct afl_state* afl, uint32_t bb);
 
 struct score_union* funafl_get_score_with_loc_and_update_function_count(struct afl_state* afl, 
-    int new_tracebit_index[], int count_new_tracebit_index);
+    uint32_t new_tracebit_index[], uint32_t count_new_tracebit_index);
 
 #endif // READ_JSON_H

@@ -36,7 +36,11 @@ run the IDAPro scripts `static/acg_extract.py` and `static/loc2bbs_funtions.py` 
 ## Running evaluation
 ### FuzzBench
 copy the `integration/fuzzbench` to FuzzBench `fuzzbench/fuzzers/funafl` then run the evaluation of funafl 
-and completed static analysis and put the results data to `fuzzbench/funzzers/funafl/aicfg`
+and completed static analysis and put the results data 
++ `*_cg.pkl` for dynamic updating
++ `*_bb2attributes.json` for seed score calculation
++ `*_loc2addr.json` 
+to `fuzzbench/funzzers/funafl/aicfg`
 ```shell
 git clone https://github.com/google/fuzzbench
 cd fuzzbench/fuzzers

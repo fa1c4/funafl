@@ -105,12 +105,12 @@ void test_all_jsons_readin() {
         exit(-9);
     }
 
-    int target_programs_size = sizeof(target_programs) / sizeof(target_programs[0]);
-    int json_suffixs_size = sizeof(json_suffixs) / sizeof(json_suffixs[0]);
-    int failed_cnt = 0;
+    uint32_t target_programs_size = sizeof(target_programs) / sizeof(target_programs[0]);
+    uint32_t json_suffixs_size = sizeof(json_suffixs) / sizeof(json_suffixs[0]);
+    uint32_t failed_cnt = 0;
 
-    for (int i = 0; i < target_programs_size; i++) {
-        for (int j = 0; j < json_suffixs_size; j++) {
+    for (uint32_t i = 0; i < target_programs_size; i++) {
+        for (uint32_t j = 0; j < json_suffixs_size; j++) {
             
             char filename[256];
             snprintf(filename, sizeof(filename), "%s/%s/%s%s", 
@@ -178,7 +178,7 @@ double cjson_get_score_for_array(cJSON* cjson) {
 
 double get_score_for_array(double attributes[]) {
     double res = 0.0;
-    for (int i = 0; i < ATTRIBUTES_NUMBER; ++i) {
+    for (uint32_t i = 0; i < ATTRIBUTES_NUMBER; ++i) {
         res += attributes[i] * attributes[i];
     }
     
@@ -192,22 +192,22 @@ double get_score_for_array(double attributes[]) {
 }
 
 
-void add_bb_count_key(struct afl_state* afl, int bb_random_val) {
+void add_bb_count_key(struct afl_state* afl, uint32_t bb_loc_val) {
     struct basic_block_count *bbc = NULL;
-    HASH_FIND_INT(afl->bb2count, &bb_random_val, bbc);
+    HASH_FIND_INT(afl->bb2count, &bb_loc_val, bbc);
     
     // if bbc not found in bb2count, create a new one
     if (bbc == NULL) {
         bbc = (struct basic_block_count*)malloc(sizeof(struct basic_block_count));
-        bbc->bb_random = bb_random_val;
+        bbc->bb_loc = bb_loc_val;
         bbc->count = 0;
-        // add bbc->bb_random as key bbc as value to bb2count hashtable
-        HASH_ADD_INT(afl->bb2count, bb_random, bbc);
+        // add bbc->bb_loc as key bbc as value to bb2count hashtable
+        HASH_ADD_INT(afl->bb2count, bb_loc, bbc);
     }
 }
 
 
-void add_bb_count(struct afl_state* afl, int bb) {
+void add_bb_count(struct afl_state* afl, uint32_t bb) {
     struct basic_block_count *bbc = NULL;
     HASH_FIND_INT(afl->bb2count, &bb, bbc);
     if (bbc == NULL) {
@@ -250,15 +250,15 @@ void funafl_parse_cjson(struct afl_state* afl, cJSON* cjson, int parse_mode) {
         const char* key_str = item->string;
         if (key_str) {
 
-            int loc = atoi(key_str);
+            uint32_t loc = (uint32_t)atoi(key_str);
             
             if (parse_mode == 0) { // parse bb2attributes first
                 
                 HASH_FIND_INT(afl->bb2attributes, &loc, bb);
                 if (bb == NULL) {
                     bb = (struct basic_blocks*)calloc(1, sizeof(struct basic_blocks));
-                    bb->bb_random = loc;
-                    HASH_ADD_INT(afl->bb2attributes, bb_random, bb);
+                    bb->bb_loc = loc;
+                    HASH_ADD_INT(afl->bb2attributes, bb_loc, bb);
                     add_bb_count_key(afl, loc);
                 }
                 
@@ -268,7 +268,7 @@ void funafl_parse_cjson(struct afl_state* afl, cJSON* cjson, int parse_mode) {
                 }
 
                 cJSON* value = NULL;
-                int idx = 0;
+                uint32_t idx = 0;
                 cJSON_ArrayForEach(value, item) {
                     if (idx < ATTRIBUTES_NUMBER) {
                         bb->attributes_seed[idx] = value->valuedouble;
@@ -292,7 +292,7 @@ void funafl_parse_cjson(struct afl_state* afl, cJSON* cjson, int parse_mode) {
                 }
 
                 cJSON* value = NULL;
-                int idx = 0;
+                uint32_t idx = 0;
                 cJSON_ArrayForEach(value, item) {
                     if (idx < ATTRIBUTES_NUMBER) {
                         bb->attributes_seed[idx] = value->valuedouble;
@@ -318,7 +318,7 @@ void funafl_parse_cjson(struct afl_state* afl, cJSON* cjson, int parse_mode) {
                 cJSON* value = NULL;
                 cJSON_ArrayForEach(value, item) {
                     l2b->bbs[l2b->length++] = value->valueint;
-                    if (l2b->length >= 256) {
+                    if (l2b->length >= BB_MAX_COUNT) {
                         fprintf(stderr, "Exceeded maximum number of functions\n");
                         break;
                     }
@@ -338,9 +338,10 @@ void funafl_parse_cjson(struct afl_state* afl, cJSON* cjson, int parse_mode) {
 
     // debug information to makesure the count of loc2bbs correct
     if (afl->debug && parse_mode == 2) {
+    // if (parse_mode == 2) {
         printf("[INFO] Total loc2bbs count: %u\n", HASH_COUNT(afl->record_loc2bbs));
         fflush(stdout);
-        sleep(5);
+        sleep(3);
     }
 
 }
@@ -396,19 +397,25 @@ void read_bb2attributes(struct afl_state* afl, u8* target_path) {
     cJSON_Delete(json);  // Free the cJSON object
 }
 
-void read_bb2attributes_not_first(struct afl_state* afl, u8* base_name, u8* fuzz_out) {
-    char file_path[256];
+void read_bb2attributes_dynamic(struct afl_state* afl, u8* target_path) {
+    char file_path[256], dir_path[256], base_name[256];
 
-    snprintf(file_path, sizeof(file_path), "%s/aicfg/%s%s",
-        fuzz_out, base_name, "_bb2attributes.json");
+    // split the target path
+    split_path(target_path, dir_path, base_name);
+
+    snprintf(file_path, sizeof(file_path), "%s/aicfg/%s%s", 
+        dir_path, base_name, "_bb2attributes_dynamic.json");
 
     cJSON *json = readin_json_file(file_path);
     if (json == NULL) {
         fprintf(stderr, "Failed to read JSON file %s\n", file_path);
-        exit(-16);
+        fprintf(stderr, "target_path: %s\n", target_path);
+        fprintf(stderr, "dir_path: %s\n", dir_path);
+        fprintf(stderr, "base_name: %s\n", base_name);
+        exit(-20);
     }
 
-    funafl_parse_cjson(afl, json, 1);
+    funafl_parse_cjson(afl, json, 0);
 
     cJSON_Delete(json);  // Free the cJSON object
 }
@@ -437,12 +444,12 @@ void read_loc2bbs(struct afl_state* afl, u8* target_path) {
 }
 
 
-struct score_union* get_score_by_bb(struct afl_state* afl, int bb_loc) {
+struct score_union* get_score_by_bb(struct afl_state* afl, uint32_t bb_loc) {
 
     struct basic_blocks* cur_bb = NULL;
     HASH_FIND_INT(afl->bb2attributes, &bb_loc, cur_bb);
     if (cur_bb == NULL) {
-        fprintf(stderr, "Error: bb not found in bb2attributes\n");
+        // fprintf(stderr, "Error: bb not found in bb2attributes\n");
         return NULL;
     }
 
@@ -456,15 +463,15 @@ struct score_union* get_score_by_bb(struct afl_state* afl, int bb_loc) {
 
 
 struct score_union* funafl_get_score_with_loc_and_update_function_count(struct afl_state* afl,
-    int new_tracebit_index[], int count_new_tracebit_index) {
+    uint32_t new_tracebit_index[], uint32_t count_new_tracebit_index) {
     
     double score_seed = 0.0, score_energy = 0.0;
     struct score_union* score_record = NULL;
-    int bb_num = 0, bb_num_energy = 0;
+    uint32_t bb_num = 0, bb_num_energy = 0;
 
     // get score for each bb
-    for (int i = 0; i < count_new_tracebit_index; ++i) {
-        int loc = new_tracebit_index[i];
+    for (uint32_t i = 0; i < count_new_tracebit_index; ++i) {
+        uint32_t loc = new_tracebit_index[i];
         struct loc2bbs* tmp_loc2bbs = NULL;
         HASH_FIND_INT(afl->record_loc2bbs, &loc, tmp_loc2bbs);
         if (tmp_loc2bbs == NULL) {
@@ -473,12 +480,12 @@ struct score_union* funafl_get_score_with_loc_and_update_function_count(struct a
             continue;
         }
 
-        for (int j = 0; j < tmp_loc2bbs->length; ++j) {
-            int bb_loc = tmp_loc2bbs->bbs[j];
+        for (uint32_t j = 0; j < tmp_loc2bbs->length; ++j) {
+            uint32_t bb_loc = tmp_loc2bbs->bbs[j];
             score_record = get_score_by_bb(afl, bb_loc);
 
             if (score_record == NULL) {
-                fprintf(stderr, "Error: score record not found\n");
+                fprintf(stderr, "Error: score record not found for loc=0x%x\n", bb_loc);
                 continue;
             }
 

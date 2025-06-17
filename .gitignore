@@ -5,6 +5,7 @@
 
 # debug files
 .gdb_history
+*_log
 
 # test files
 test/test_hello_aflpp
