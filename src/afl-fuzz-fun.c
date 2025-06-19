@@ -10,7 +10,26 @@
 #include "afl-fuzz-json.h"
 #include "cmplog.h"
 #include "config.h"
+// #ifdef WORD_SIZE_64 // will lead to multi-definition errors
+//   #include "coverage-64.h"
+// #else
+//   #include "coverage-32.h"
+// #endif
+#include "forkserver.h"
 
+
+extern u32 skim(const u64 *virgin, const u64 *current, const u64 *current_end);
+extern u64 classify_word(u64 word);
+extern void classify_counts_mem(u64 *mem, u32 size);
+/*
+// External declarations for lookup tables defined in afl-fuzz-bitmap.c
+extern u16      count_class_lookup16[65536];
+extern const u8 simplify_lookup[256];
+*/
+
+extern void bitmap_set(u8 *map, u32 index); // funafl code needed which is declared in afl-fuzz-bitmap.c
+
+extern u8 bitmap_read(u8 *map, u32 index); // funafl code needed which is declared in afl-fuzz-bitmap.c
 
 u32 hashArray(u32* key, u32 start, u32 len, u32 seed, u32 range) {
 

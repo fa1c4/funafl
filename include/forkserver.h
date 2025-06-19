@@ -253,6 +253,9 @@ void              afl_fsrv_killall(void);
 void              afl_fsrv_deinit(afl_forkserver_t *fsrv);
 void              afl_fsrv_kill(afl_forkserver_t *fsrv);
 
+u32 __attribute__((hot)) read_s32_timed(s32 fd, s32 *buf, u32 timeout_ms,
+                                               volatile u8 *stop_soon_p); // for funafl used
+
 #ifdef __linux__
 void nyx_load_target_hash(afl_forkserver_t *fsrv);
 #endif

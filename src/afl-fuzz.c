@@ -2283,8 +2283,16 @@ int main(int argc, char **argv_orig, char **envp) {
   // read_loc2bbs(afl, test_target_path);
   // read_bb2attributes(afl, test_target_path);
 
+  // const char* target_path = argv[optind];
+  if (afl->debug)
+    fprintf(stderr, "[debug] <1> target_path: %s\n", argv[optind]);
   read_bb2attributes(afl, argv[optind]);
   read_loc2bbs(afl, argv[optind]);
+
+  // if (afl->debug)
+  //   fprintf(stderr, "[debug] <2> target_path: %s\n", argv[optind]);
+  // init_dynamic_func_hit_update(argv[optind]); // funafl code to write target_name_function2count.txt
+  init_dynamic_func_hit_update(); // funafl code to write target_name_function2count.txt
   /* end of funafl code */
 
   u64 prev_target_hash = 0;
@@ -3113,7 +3121,11 @@ int main(int argc, char **argv_orig, char **envp) {
 
     /* funafl code: updating bb2attributes by reading new files */
     if (attributes_updating_flag) {
+      if (afl->debug)
+        fprintf(stderr, "[debug] <3> target_path: %s\n", argv[optind]);
       read_bb2attributes_dynamic(afl, argv[optind]);
+      // update_function2count(afl, argv[optind]); // update function2count txt
+      update_function2count(afl); // update function2count txt
       attributes_updating_flag = 0;
       ACTF("Attributes updated, continuing with new weights");
     }

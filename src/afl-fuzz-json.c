@@ -34,7 +34,13 @@ cJSON* readin_json_file(const u8* filename) {
     }
 
     // Read file content into the buffer
-    fread(content, 1, file_size, file);
+    size_t read_size = fread(content, 1, file_size, file);
+    if (read_size != file_size) {
+        fprintf(stderr, "Failed to read the complete file %s\n", filename);
+        free(content);
+        fclose(file);
+        return NULL;
+    }
     content[file_size] = '\0';  // Null terminate the string
 
     // Parse the JSON content
@@ -375,7 +381,7 @@ void split_path(const char *path, char *dir, char *filename) {
 
 
 void read_bb2attributes(struct afl_state* afl, u8* target_path) {
-    char file_path[256], dir_path[256], base_name[256];
+    char file_path[768], dir_path[512], base_name[256];
 
     // split the target path
     split_path(target_path, dir_path, base_name);
@@ -398,13 +404,26 @@ void read_bb2attributes(struct afl_state* afl, u8* target_path) {
 }
 
 void read_bb2attributes_dynamic(struct afl_state* afl, u8* target_path) {
-    char file_path[256], dir_path[256], base_name[256];
+    if (afl->debug)
+        fprintf(stderr, "[debug] <read_bb2attributes_dynamic> target_path: %s\n", target_path);
+    char file_path[768]; //, dir_path[512], base_name[256];
 
     // split the target path
-    split_path(target_path, dir_path, base_name);
+    // split_path(target_path, dir_path, base_name);
+    
+    const char* dir_path = getenv("FUN_AICFG_DIR");
+    const char* base_name = getenv("TARGET_NAME");
 
-    snprintf(file_path, sizeof(file_path), "%s/aicfg/%s%s", 
+    snprintf(file_path, sizeof(file_path), "%s/%s%s", 
         dir_path, base_name, "_bb2attributes_dynamic.json");
+
+    // Check if file exists before attempting to read, if not then return without parsing
+    if (access(file_path, F_OK) != 0) {
+        if (afl->debug) {
+            fprintf(stderr, "[debug] File does not exist: %s\n", file_path);
+        }
+        return;  // File doesn't exist, return without parsing
+    }
 
     cJSON *json = readin_json_file(file_path);
     if (json == NULL) {
@@ -420,8 +439,88 @@ void read_bb2attributes_dynamic(struct afl_state* afl, u8* target_path) {
     cJSON_Delete(json);  // Free the cJSON object
 }
 
+// void init_dynamic_func_hit_update(u8* target_path) {
+void init_dynamic_func_hit_update() {
+    // funafl code to write target_name_function2count.txt
+    char file_path[768]; //, dir_path[512], base_name[256];
+
+    // split the target path
+    // split_path(target_path, dir_path, base_name);
+
+    const char* dir_path = getenv("FUN_AICFG_DIR"); 
+    const char* base_name = getenv("TARGET_NAME");
+
+    snprintf(file_path, sizeof(file_path), "%s/%s%s", 
+        dir_path, base_name, "_function2count.txt");
+
+    // Create/truncate the file to ensure it exists and is empty
+    FILE* fp = fopen(file_path, "w");
+    if (!fp) {
+        PFATAL("Failed to create/open file %s", file_path);
+    }
+    
+    // File is automatically empty after opening with "w" mode
+    fclose(fp);
+    
+    // Optional: Log the file creation for debugging
+    OKF("Initialized function count file: %s", file_path);
+}
+
+// void update_function2count(struct afl_state* afl, u8* target_path) {
+void update_function2count(struct afl_state* afl) {
+    // funafl code to update target_name_function2count.txt
+    char file_path[768]; //, dir_path[512], base_name[256];
+
+    // split the target path
+    // split_path(target_path, dir_path, base_name);
+
+    const char* dir_path = getenv("FUN_AICFG_DIR");
+    const char* base_name = getenv("TARGET_NAME");
+
+    snprintf(file_path, sizeof(file_path), "%s/%s%s", 
+        dir_path, base_name, "_function2count.txt");
+
+    // update the afl->fsrv.func_hit_map into *_function2count.txt
+    FILE* fp = fopen(file_path, "w");
+    if (!fp) {
+        PFATAL("Failed to create/open file %s", file_path);
+    }
+
+    // Validate func_hit_map pointer
+    if (!afl->fsrv.func_hit_map) {
+        WARNF("func_hit_map is NULL, skipping update");
+        return;
+    }
+    
+    // afl->fsrv.func_hit_map is an u32 array with size FUNC_HIT_SHM_SIZE
+    // write the data as format: index:value
+    // Write only non-zero entries to reduce file size and improve readability
+    u32 entries_written = 0;
+    for (u32 i = 0; i < FUNC_HIT_SHM_SIZE; ++i) {
+        if (afl->fsrv.func_hit_map[i] > 0) {
+        if (fprintf(fp, "%u:%u\n", i, afl->fsrv.func_hit_map[i]) < 0) {
+            fclose(fp);
+            PFATAL("Failed to write to file %s", file_path);
+        }
+        entries_written++;
+        }
+    }
+
+    // Check for write errors before closing
+    if (fflush(fp) != 0) {
+        fclose(fp);
+        PFATAL("Failed to flush data to file %s", file_path);
+    }
+
+    // File is automatically empty after opening with "w" mode
+    fclose(fp);
+    
+    // Optional: Log the file creation for debugging
+    OKF("Updated function count file: %s", file_path);
+}
+
 void read_loc2bbs(struct afl_state* afl, u8* target_path) {
-    char file_path[256], dir_path[256], base_name[256];
+    char file_path[768], dir_path[512], base_name[256];
 
     // split target_path into dir_path and base_name
     split_path(target_path, dir_path, base_name);

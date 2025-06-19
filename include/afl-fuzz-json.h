@@ -86,4 +86,10 @@ struct score_union* get_score_by_bb(struct afl_state* afl, uint32_t bb);
 struct score_union* funafl_get_score_with_loc_and_update_function_count(struct afl_state* afl, 
     uint32_t new_tracebit_index[], uint32_t count_new_tracebit_index);
 
+// void init_dynamic_func_hit_update(u8* target_path);
+void init_dynamic_func_hit_update();
+
+// void update_function2count(struct afl_state* afl, u8* target_path);
+void update_function2count(struct afl_state* afl);
+
 #endif // READ_JSON_H

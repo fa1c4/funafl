@@ -8,7 +8,8 @@
 u32 skim(const u64 *virgin, const u64 *current, const u64 *current_end);
 u64 classify_word(u64 word);
 
-inline u64 classify_word(u64 word) {
+// inline u64 classify_word(u64 word) {
+u64 classify_word(u64 word) {
 
   u16 mem16[4];
   memcpy(mem16, &word, sizeof(mem16));
@@ -55,7 +56,8 @@ void simplify_trace(afl_state_t *afl, u8 *bytes) {
 
 }
 
-inline void classify_counts(afl_forkserver_t *fsrv) {
+// inline void classify_counts(afl_forkserver_t *fsrv) {
+void classify_counts(afl_forkserver_t *fsrv) {
 
   u64 *mem = (u64 *)fsrv->trace_bits;
   u32  i = (fsrv->map_size >> 3);
@@ -92,7 +94,8 @@ void classify_counts_mem(u64 *mem, u32 size) {
 
 /* Updates the virgin bits, then reflects whether a new count or a new tuple is
  * seen in ret. */
-inline void discover_word(u8 *ret, u64 *current, u64 *virgin) {
+// inline void discover_word(u8 *ret, u64 *current, u64 *virgin) {
+void discover_word(u8 *ret, u64 *current, u64 *virgin) {
 
   /* Optimize for (*current & *virgin) == 0 - i.e., no bits in current bitmap
      that have not been already cleared from the virgin map - since this will
@@ -126,7 +129,8 @@ inline void discover_word(u8 *ret, u64 *current, u64 *virgin) {
 
 #if defined(__AVX512F__) && defined(__AVX512DQ__)
   #define PACK_SIZE 64
-inline u32 skim(const u64 *virgin, const u64 *current, const u64 *current_end) {
+// inline u32 skim(const u64 *virgin, const u64 *current, const u64 *current_end) {
+u32 skim(const u64 *virgin, const u64 *current, const u64 *current_end) {
 
   for (; current != current_end; virgin += 8, current += 8) {
 
@@ -160,7 +164,8 @@ inline u32 skim(const u64 *virgin, const u64 *current, const u64 *current_end) {
 
 #if !defined(PACK_SIZE) && defined(__AVX2__)
   #define PACK_SIZE 32
-inline u32 skim(const u64 *virgin, const u64 *current, const u64 *current_end) {
+// inline u32 skim(const u64 *virgin, const u64 *current, const u64 *current_end) {
+u32 skim(const u64 *virgin, const u64 *current, const u64 *current_end) {
 
   __m256i zeroes = _mm256_setzero_si256();
 
@@ -193,7 +198,8 @@ inline u32 skim(const u64 *virgin, const u64 *current, const u64 *current_end) {
 
 #if !defined(PACK_SIZE)
   #define PACK_SIZE 32
-inline u32 skim(const u64 *virgin, const u64 *current, const u64 *current_end) {
+// inline u32 skim(const u64 *virgin, const u64 *current, const u64 *current_end) {
+u32 skim(const u64 *virgin, const u64 *current, const u64 *current_end) {
 
   for (; current < current_end; virgin += 4, current += 4) {
 

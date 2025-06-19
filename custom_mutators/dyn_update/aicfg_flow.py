@@ -11,12 +11,22 @@ import logging
 import time
 from pathlib import Path
 import subprocess
-from custom_mutators.dyn_update.utils import *
+
+import custom_mutators.dyn_update.utils as ut
+sys.modules['utils'] = ut
 
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
+
+if logger.hasHandlers():
+    logger.handlers.clear()
+
+handler = logging.StreamHandler(sys.stderr)
+formatter = logging.Formatter('[%(asctime)s] %(levelname)s: %(message)s')
+handler.setFormatter(formatter)
+logger.addHandler(handler)
 
 '''
 get the paths of files
@@ -32,11 +42,11 @@ set constant parameters
 base_exp = 1
 wl_time = 1
 attrs_mask = '1111111' # enable all attributes
-partition_wl_graph = parameters["partition_wl_graph"]
-function_count_lower = parameters["function_count_lower"]
-attributes_num = parameters["attributes_num"]
-wl_time_base = parameters["wl_time_base"]
-update_interval = parameters.get("update_interval", 4096)  # Make configurable
+partition_wl_graph = ut.parameters["partition_wl_graph"]
+function_count_lower = ut.parameters["function_count_lower"]
+attributes_num = ut.parameters["attributes_num"]
+wl_time_base = ut.parameters["wl_time_base"]
+update_interval = ut.parameters.get("update_interval", 4096)  # Make configurable
 
 '''
 init global variables
@@ -63,7 +73,7 @@ def find_afl_pid():
             if pids and pids[0]:
                 return int(pids[0])
     except (subprocess.TimeoutExpired, subprocess.SubprocessError, ValueError) as e:
-        logger.warning(f"Failed to find AFL PID automatically: {e}")
+        logger.warning(f"[aicfg_flow] Failed to find AFL PID automatically: {e}")
     return None
 
 '''
@@ -73,16 +83,14 @@ def signal_afl_update_aicfg():
     """Send SIGUSR1 to AFL process to trigger attribute reload"""
     global afl_pid
     
-    if not pid:
-        pid = find_afl_pid()
+    assert afl_pid is not None, 'assigned afl_pid error'
     
-    if pid:
+    if afl_pid:
         try:
-            os.kill(pid, signal.SIGUSR1)
-            logger.info(f"Sent SIGUSR1 to AFL process {pid}")
+            os.kill(afl_pid, signal.SIGUSR1)
             return True
         except (OSError, ProcessLookupError) as e:
-            logger.error(f"Failed to signal AFL process {pid}: {e}")
+            logger.error(f"[aicfg_flow] Failed to signal AFL process {afl_pid}: {e}")
     else:
         logger.error("Could not find AFL process PID")
     
@@ -100,7 +108,7 @@ def atomic_write_json(data, filepath):
         os.rename(temp_filepath, filepath)
         return True
     except Exception as e:
-        logger.error(f"Failed to write {filepath}: {e}")
+        logger.error(f"[aicfg_flow] Failed to write {filepath}: {e}")
         # Clean up temp file if it exists
         if os.path.exists(temp_filepath):
             os.remove(temp_filepath)
@@ -119,7 +127,7 @@ def get_sum_of_attributes():
     for i, node in enumerate(CG.nodes()):
         if i != 0:
             cur_attr = node.get_attr()
-            res = list_add(res, cur_attr)
+            res = ut.list_add(res, cur_attr)
     
     return res
 
@@ -129,13 +137,13 @@ get the range of the attributes of the nodes in the graph
 def number_range():
     global CG
     if not CG.nodes():
-        logger.warning("No nodes in graph for number_range calculation")
+        logger.warning("[aicfg_flow] No nodes in graph for number_range calculation")
         return
 
     attributes, attributes_sum = [], []
     for node in CG.nodes():
         attributes.append(node.get_attr())
-        attributes_sum = list_add(attributes_sum, node.get_attr())
+        attributes_sum = ut.list_add(attributes_sum, node.get_attr())
     
     output_name = os.path.join(aicfg_dir, 'attributes_sum.json')
     if atomic_write_json(attributes_sum, output_name):
@@ -148,7 +156,7 @@ subgraph
 def wl_subgraph(times=1):
     global CG, hash2func_node
     if not CG.nodes():
-        logger.warning("Empty graph, skipping WL subgraph")
+        logger.warning("[aicfg_flow] Empty graph, skipping WL subgraph")
         return
 
     for _ in range(times):
@@ -178,11 +186,11 @@ def wl_subgraph(times=1):
             attributes = []
             for cycle_node in cycle_nodes:
                 attributes.append(cycle_node.get_attr())
-            sum_of_attributes = sum_of_lists(attributes)
-            average_of_attributes = list_parameter_multiply(sum_of_attributes, 1.0 / cycle_num)
-            new_attributes1 = list_parameter_multiply(average_of_attributes, partition_wl_graph)
-            new_attributes2 = list_parameter_multiply(cur_attr, 1 - partition_wl_graph)
-            new_attributes = list_add(new_attributes1, new_attributes2)
+            sum_of_attributes = ut.sum_of_lists(attributes)
+            average_of_attributes = ut.list_parameter_multiply(sum_of_attributes, 1.0 / cycle_num)
+            new_attributes1 = ut.list_parameter_multiply(average_of_attributes, partition_wl_graph)
+            new_attributes2 = ut.list_parameter_multiply(cur_attr, 1 - partition_wl_graph)
+            new_attributes = ut.list_add(new_attributes1, new_attributes2)
             node2node[node].set_attr_by_list(new_attributes)
     
         CG = new_CG
@@ -237,9 +245,9 @@ def get_data_feature():
             max_value = deepcopy(attrs)
             min_value = deepcopy(attrs)
             sum_value = deepcopy(attrs)
-            s_square = list_square(attrs)
+            s_square = ut.list_square(attrs)
         else:
-            s_square = list_add(s_square, list_square(attrs))
+            s_square = ut.list_add(s_square, ut.list_square(attrs))
             for j, attr in enumerate(attrs):
                 if attr > max_value[j]:
                     max_value[j] = attr
@@ -342,14 +350,15 @@ def write_bb2attributes(tail='_bb2attributes.json'):
     output_name = aicfg_dir + os.sep + target_name + tail
     if atomic_write_json(bb2attributes, output_name):
         logger.info(f'Saved {output_name}')
-
+        return True
+    return False
 
 '''
 reconstruct graph
 '''
 def read_function2count_data(input_name):
     bbs_hit = {}
-    max_function_count = 0
+    max_function_count = 1
     with open(input_name, 'r') as fr:
         for data in fr:
             key, value = map(int, data.strip().split(':'))
@@ -366,7 +375,7 @@ def reconstruct_graph():
     cg_name_static = os.path.join(aicfg_dir, target_name + '_cg.pkl')
     cg_name = cg_name_dynamic if os.path.exists(cg_name_dynamic) else cg_name_static
     if not os.path.exists(cg_name):
-        logger.error(f"No graph file found: {cg_name}")
+        logger.error(f"[aicfg_flow] No graph file found: {cg_name}")
         return False
     
     # read the graph from file
@@ -375,7 +384,7 @@ def reconstruct_graph():
         hash2func_node[node.addr] = node
 
     data_feature = get_data_feature()
-    input_name = os.path.join(aicfg_dir, 'function2count.txt') # need afl-fuzz to write shm data to txt
+    input_name = os.path.join(aicfg_dir, target_name + '_function2count.txt') # need afl-fuzz to write shm data to txt
     bbs_hit, max_function_count = read_function2count_data(input_name)
     base_exp = function_count_lower ** (1.0 / max_function_count)
 
@@ -383,10 +392,11 @@ def reconstruct_graph():
     for node in CG.nodes():
         if node.addr in bbs_hit:
             count = bbs_hit[node.addr]
-            new_attr = list_parameter_multiply(node.get_attr(), get_count_score(count))
+            new_attr = ut.list_parameter_multiply(node.get_attr(), get_count_score(count))
             node.set_attr_by_list(new_attr)
     
     normalization_max_min_range(data_feature['mmin'], data_feature['mmax'])
+    return True
 
 
 def keep_average(avg1, avg2):
@@ -412,7 +422,7 @@ def post_run():
     '''
     Called after each time the execution of the target program by AFL++
     '''
-    global wl_time, CG, call_count, update_lock, update_interval
+    global wl_time, CG, call_count, update_lock, update_interval, wl_time_base
 
     # execute dynamic adjustment every 1000 calls
     call_count += 1
@@ -421,28 +431,29 @@ def post_run():
 
     # Prevent concurrent updates
     if update_lock:
-        logger.debug("Update already in progress, skipping")
+        logger.debug("[aicfg_flow] Update already in progress, skipping")
         return
     update_lock = True
 
     try:
-        logger.info(f"Starting dynamic update at call {call_count}")
+        logger.info(f"[aicfg_flow] Starting dynamic update at call {call_count}")
         
         # Reconstruct graph
         if not reconstruct_graph():
-            logger.error("Failed to reconstruct graph")
+            logger.error("[aicfg_flow] Failed to reconstruct graph")
             return
         
         nodes_num = len(list(CG.nodes()))
         if nodes_num == 0:
-            logger.warning("Empty graph after reconstruction")
+            logger.warning("[aicfg_flow] Empty graph after reconstruction")
             return
             
         # Calculate WL time
+        assert wl_time_base != 0, 'wl_time_base is 0'
         if int(nodes_num / wl_time_base) > 1 and wl_time <= 1:
             wl_time = int(nodes_num / wl_time_base)
         
-        logger.info(f'nodes_num: {nodes_num}, wl_time: {wl_time}, wl_time_base: {wl_time_base}')
+        logger.info(f'[aicfg_flow] nodes_num: {nodes_num}, wl_time: {wl_time}, wl_time_base: {wl_time_base}')
 
         # Apply WL subgraph
         wl_subgraph(wl_time)
@@ -453,26 +464,26 @@ def post_run():
         
         # Write updated attributes
         if write_bb2attributes('_bb2attributes_dynamic.json'):
-            logger.info("Successfully wrote dynamic attributes")
+            logger.info("[aicfg_flow] Successfully wrote dynamic attributes")
             
             # Save updated graph
             cg_file = os.path.join(aicfg_dir, target_name + '_cg_dynamic.pkl')
             try:
                 nx.write_gpickle(CG, cg_file)
-                logger.info(f"Saved updated graph to {cg_file}")
+                logger.info(f"[aicfg_flow] Saved updated graph to {cg_file}")
             except Exception as e:
-                logger.error(f"Failed to save graph: {e}")
+                logger.error(f"[aicfg_flow] Failed to save graph: {e}")
             
             # Signal AFL to reload
             if signal_afl_update_aicfg():
-                logger.info("Successfully signaled AFL for attribute reload")
+                logger.info("[aicfg_flow] Successfully signaled AFL for attribute reload")
             else:
-                logger.warning("Failed to signal AFL for attribute reload")
+                logger.warning("[aicfg_flow] Failed to signal AFL for attribute reload")
         else:
-            logger.error("Failed to write dynamic attributes")
+            logger.error("[aicfg_flow] Failed to write dynamic attributes")
     
     except Exception as e:
-        logger.error(f"Error in post_run: {e}")
+        logger.error(f"[aicfg_flow] Error in post_run: {e}")
 
     # finally
     update_lock = False
@@ -484,23 +495,28 @@ entry of fuzz python module
 '''
 def init(seed):
     global afl_pid
-    logger.info('Initializing AICFG dynamic adjustment module...')
-    logger.info(f'aicfg_dir: {aicfg_dir}')
-    logger.info(f'attrs_mask: {attrs_mask}')
-    logger.info(f'target_name: {target_name}')
-    logger.info(f'update_interval: {update_interval}')
+    logger.info('[aicfg_flow] Initializing AICFG dynamic adjustment module...')
+    logger.info(f'[aicfg_flow] aicfg_dir: {aicfg_dir}')
+    logger.info(f'[aicfg_flow] attrs_mask: {attrs_mask}')
+    logger.info(f'[aicfg_flow] target_name: {target_name}')
+    logger.info(f'[aicfg_flow] update_interval: {update_interval}')
     
     # Try to get AFL PID for signaling
     if not afl_pid:
         afl_pid = find_afl_pid()
         if afl_pid:
-            logger.info(f'Found AFL PID: {afl_pid}')
+            logger.info(f'[aicfg_flow] Found AFL PID: {afl_pid}')
         else:
-            logger.warning('Could not find AFL PID - signaling may not work')
+            logger.warning('[aicfg_flow] Could not find AFL PID - signaling may not work')
     
+    dynamic_attr_file = os.path.join(aicfg_dir, f"{target_name}_bb2attributes_dynamic.json")
+    if os.path.exists(dynamic_attr_file):
+        os.remove(dynamic_attr_file)
+        logger.info(f"[aicfg_flow] Removed old dynamic attribute file: {dynamic_attr_file}")
+
     # Validate required directories and files
     if not os.path.exists(aicfg_dir):
-        logger.error(f"AICFG directory does not exist: {aicfg_dir}")
+        logger.error(f"[aicfg_flow] AICFG directory does not exist: {aicfg_dir}")
         return False
         
     return True
