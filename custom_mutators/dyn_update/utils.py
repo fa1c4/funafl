@@ -42,7 +42,8 @@ parameters = {
     'function_count_lower': 0.99, 
     'partition': 0.1, 
     'attributes_num': 7, 
-    'wl_time_base': 1200
+    'wl_time_base': 1200,
+    'update_interval_hours': 0.75
 }
 
 

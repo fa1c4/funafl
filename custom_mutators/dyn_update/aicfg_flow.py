@@ -47,6 +47,8 @@ function_count_lower = ut.parameters["function_count_lower"]
 attributes_num = ut.parameters["attributes_num"]
 wl_time_base = ut.parameters["wl_time_base"]
 update_interval = ut.parameters.get("update_interval", 4096)  # Make configurable
+update_interval_hours = ut.parameters.get("update_interval_hours", 1)  # Default 1 hour
+update_interval_seconds = update_interval_hours * 3600  # Convert to seconds
 
 '''
 init global variables
@@ -422,11 +424,18 @@ def post_run():
     '''
     Called after each time the execution of the target program by AFL++
     '''
-    global wl_time, CG, call_count, update_lock, update_interval, wl_time_base
+    # global wl_time, CG, call_count, update_lock, update_interval, wl_time_base
+    global wl_time, CG, call_count, update_lock, last_update_time, update_interval_seconds, wl_time_base
 
-    # execute dynamic adjustment every 1000 calls
-    call_count += 1
-    if call_count < update_interval:
+    # [path 1] execute dynamic adjustment every 1000 calls
+    # call_count += 1
+    # if call_count < update_interval:
+    #     return
+
+    # [path 2] Check if enough time has passed since last update
+    current_time = time.time()
+    time_since_last_update = current_time - last_update_time
+    if time_since_last_update < update_interval_seconds:
         return
 
     # Prevent concurrent updates
@@ -486,21 +495,25 @@ def post_run():
         logger.error(f"[aicfg_flow] Error in post_run: {e}")
 
     # finally
+    # call_count = 0
     update_lock = False
-    call_count = 0
+    last_update_time = current_time
 
 
 '''
 entry of fuzz python module
 '''
 def init(seed):
-    global afl_pid
+    global afl_pid, last_update_time
     logger.info('[aicfg_flow] Initializing AICFG dynamic adjustment module...')
     logger.info(f'[aicfg_flow] aicfg_dir: {aicfg_dir}')
     logger.info(f'[aicfg_flow] attrs_mask: {attrs_mask}')
     logger.info(f'[aicfg_flow] target_name: {target_name}')
     logger.info(f'[aicfg_flow] update_interval: {update_interval}')
     
+    # init last update time at the beginning
+    last_update_time = time.time()
+
     # Try to get AFL PID for signaling
     if not afl_pid:
         afl_pid = find_afl_pid()
@@ -525,6 +538,9 @@ def deinit():
     logger.info('AICFG dynamic adjustment module shutting down')
     
     # Final cleanup - save any pending updates
-    if call_count > 0:
+    # if call_count > 0:
+    current_time = time.time()
+    time_since_last_update = current_time - last_update_time
+    if time_since_last_update > 256:
         logger.info("Performing final attribute update before shutdown")
         post_run()
