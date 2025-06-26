@@ -1,6 +1,6 @@
 # funafl
 
-funafl fuzzer instance that has the following config active for all benchmarks:
+funafl fuzzer instance that has the following config active for all benchmarks (align with AFL++ in fuzzbench):
   - PCGUARD instrumentation 
   - cmplog feature
   - dict2file feature

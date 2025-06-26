@@ -45,29 +45,6 @@ def build(*args):  # pylint: disable=too-many-branches,too-many-statements
     # Placeholder comment.
     build_directory = os.environ['OUT']
 
-    # PATH 2: Allocate shared memory for function hits by linux command
-    # try:
-    #     # Create shared memory segment of size 1MB (262144 * 4 bytes = 1,048,576)
-    #     shm_size = 262144 * 4
-    #     result = subprocess.run(['ipcmk', '-M', str(shm_size)],
-    #                             check=True,
-    #                             stdout=subprocess.PIPE,
-    #                             stderr=subprocess.PIPE,
-    #                             text=True)
-    #     # Parse output like: "Shared memory id: 32769"
-    #     match = re.search(r'Shared memory id: (\d+)', result.stdout)
-    #     if not match:
-    #         raise RuntimeError(f'can not parse share memory id')
-        
-    #     shm_id = match.group(1)
-    #     os.environ['__AFL_FUNC_HIT_SHM_ID'] = shm_id
-
-    # except Exception as e:
-    #     raise RuntimeError(f"[funafl] Failed to create FUNC_HIT shm segment: {e}")
-
-    # assert "__AFL_FUNC_HIT_SHM_ID" in dict(os.environ).keys(), f'export env __AFL_FUNC_HIT_SHM_ID error'
-    # end of FunAFL
-
     # If nothing was set this is the default:
     if not build_modes:
         # build_modes = ['tracepc', 'cmplog', 'dict2file']
@@ -299,29 +276,10 @@ def fuzz(input_corpus,
     # funafl environment variable
     os.environ['FUN_AICFG_DIR'] = target_binary_directory + os.sep + 'aicfg'
     os.environ['TARGET_NAME'] = target_binary_name
-
-    # PATH 2: Allocate shared memory for function hits by linux command
-    # try:
-    #     # Create shared memory segment of size 1MB (262144 * 4 bytes = 1,048,576)
-    #     shm_size = 262144 * 4
-    #     result = subprocess.run(['ipcmk', '-M', str(shm_size)],
-    #                             check=True,
-    #                             stdout=subprocess.PIPE,
-    #                             stderr=subprocess.PIPE,
-    #                             text=True)
-    #     # Parse output like: "Shared memory id: 32769"
-    #     match = re.search(r'Shared memory id: (\d+)', result.stdout)
-    #     if not match:
-    #         raise RuntimeError(f'can not parse share memory id')
-        
-    #     shm_id = match.group(1)
-    #     os.environ['__AFL_FUNC_HIT_SHM_ID'] = shm_id
-
-    # except Exception as e:
-    #     raise RuntimeError(f"[funafl] Failed to create FUNC_HIT shm segment: {e}")
-
-    # assert "__AFL_FUNC_HIT_SHM_ID" in dict(os.environ).keys(), f'export env __AFL_FUNC_HIT_SHM_ID error'
-    # end of FunAFL
+    
+    # enable dynamic updating AICFG
+    os.environ['PYTHONPATH'] = '/afl'
+    os.environ['AFL_PYTHON_MODULE'] = 'custom_mutators.dyn_update.aicfg_flow'
 
     if not skip:
         os.environ['AFL_DISABLE_TRIM'] = '1'
