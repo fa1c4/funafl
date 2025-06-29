@@ -43,7 +43,7 @@ parameters = {
     'partition': 0.1, 
     'attributes_num': 7, 
     'wl_time_base': 1200,
-    'update_interval_hours': 6
+    'update_interval_hours': 12
 }
 
 
