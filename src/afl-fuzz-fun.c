@@ -2025,53 +2025,56 @@ u32 funafl_calculate_score(afl_state_t *afl, struct queue_entry *q) {
   }
 
   /* funafl code */
-  bool trace_start1 = true, trace_start2 = true;
-  d64 times_hit = (d64)afl->global_function_trace[q->function_trace_hash];
-  d64 cur_score = afl->queue_cur->energy_score;
-  
-  if (double_is_equal(times_hit, 0.0)) {
-    times_hit = 1.0;
-  }
-  
-  if (TRACE2 && trace_start1 && trace_start2) {
-  
-    if (times_hit < afl->average_function_trace) {
-
-        perf_score *= pow(2, afl->average_function_trace / times_hit);
-  
-    } else {
-  
-        perf_score *= pow(2, afl->average_function_trace / times_hit) - 1;
-  
-    }
-  
-  }
-
-  if (ENERGY && afl->energy_times > ENERGY_START_TIME) {
+  if (afl->dynamic_enabled) { 
+    // only enable the dynamic update when coverage increase rate is low
+    bool trace_start1 = true, trace_start2 = true;
+    d64 times_hit = (d64)afl->global_function_trace[q->function_trace_hash];
+    d64 cur_score = afl->queue_cur->energy_score;
     
-    if (double_is_equal(afl->max_score, 0.0) && double_is_equal(afl->min_score, FLT_MAX)) {
+    if (double_is_equal(times_hit, 0.0)) {
+      times_hit = 1.0;
+    }
+    
+    if (TRACE2 && trace_start1 && trace_start2) {
+    
+      if (times_hit < afl->average_function_trace) {
 
-        ACTF("NO SCORE");
-        exit(-2);
+          perf_score *= pow(2, afl->average_function_trace / times_hit);
+    
+      } else {
+    
+          perf_score *= pow(2, afl->average_function_trace / times_hit) - 1;
+    
+      }
+    
+    }
 
-    } else if (double_is_equal(cur_score, 0.0)) {
+    if (ENERGY && afl->energy_times > ENERGY_START_TIME) {
+      
+      if (double_is_equal(afl->max_score, 0.0) && double_is_equal(afl->min_score, FLT_MAX)) {
 
-        ACTF("NO CUR SCORE");
-        exit(-3);
+          ACTF("NO SCORE");
+          exit(-2);
 
-    } else {
-        // normalizing the score
-        if (double_is_equal(afl->average_score_energy, 0.0)) {
-            afl->average_score_energy = 1.0;
-        } 
-        perf_score *= cur_score / afl->average_score_energy;
+      } else if (double_is_equal(cur_score, 0.0)) {
+
+          ACTF("NO CUR SCORE");
+          exit(-3);
+
+      } else {
+          // normalizing the score
+          if (double_is_equal(afl->average_score_energy, 0.0)) {
+              afl->average_score_energy = 1.0;
+          } 
+          perf_score *= cur_score / afl->average_score_energy;
+
+      }
 
     }
 
+    if (afl->energy_times <= ENERGY_START_TIME) 
+      afl->energy_times++;
   }
-
-  if (afl->energy_times <= ENERGY_START_TIME) 
-    afl->energy_times++;
   /* end of funafl code */
 
   /* Make sure that we don't go over limit. */

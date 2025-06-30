@@ -882,6 +882,7 @@ typedef struct afl_state {
   struct loc2bbs* record_loc2bbs;
   struct basic_block_count* bb2count;
   struct basic_blocks* bb2attributes;
+  bool dynamic_enabled;
 
   u32 trace_bits_index_when_new_path_is_added;
   u32 count_new_tracebit_index;

@@ -129,6 +129,142 @@ static void update_signal_handler(int sig) {
 void init_dynamic_update_signal(void) {
   signal(SIGUSR1, update_signal_handler);
 }
+
+/* Coverage monitoring structures */
+typedef struct {
+    u64 last_coverage_count;
+    u64 current_coverage_count;
+    u64 last_check_time;
+    u64 coverage_check_interval;  // in milliseconds
+    double cov_inc_threshold;     // coverage increase threshold (e.g., 0.05 for 5%)
+    bool dynamic_enabled;
+} coverage_monitor_t;
+
+static coverage_monitor_t* cov_monitor = NULL;
+
+/* Set environment variable for Python module */
+void set_dynamic_environment_variable(bool enable) {
+    if (enable) {
+        if (setenv("DYNAMIC_ENABLE", "1", 1) != 0) {
+            WARNF("Failed to set DYNAMIC_ENABLE environment variable");
+        } else {
+            ACTF("Dynamic updating ENABLED - coverage increase below threshold");
+        }
+    } else {
+        if (setenv("DYNAMIC_ENABLE", "0", 1) != 0) {
+            WARNF("Failed to unset DYNAMIC_ENABLE environment variable");
+        } else {
+            ACTF("Dynamic updating DISABLED - coverage increase above threshold");
+        }
+    }
+}
+
+/* Initialize coverage monitoring */
+void init_coverage_monitor(afl_state_t* afl, double threshold, u64 check_interval_ms) {
+    cov_monitor = (coverage_monitor_t*)calloc(1, sizeof(coverage_monitor_t));
+    if (!cov_monitor) {
+        FATAL("Could not allocate coverage monitor");
+    }
+    
+    cov_monitor->last_coverage_count = 0;
+    cov_monitor->current_coverage_count = 0;
+    cov_monitor->last_check_time = get_cur_time();
+    cov_monitor->coverage_check_interval = check_interval_ms;
+    cov_monitor->cov_inc_threshold = threshold;
+    cov_monitor->dynamic_enabled = false;
+    
+    ACTF("Coverage monitor initialized with threshold: %.3f, interval: %llu ms", 
+         threshold, check_interval_ms);
+
+    // init the environment variable
+    set_dynamic_environment_variable(cov_monitor->dynamic_enabled);
+    afl->dynamic_enabled = cov_monitor->dynamic_enabled;
+}
+
+/* Get current edge coverage count */
+u64 get_current_coverage_count(afl_state_t* afl) {
+    u64 coverage_count = 0;
+    
+    // Count discovered edges from virgin_bits
+    for (u32 i = 0; i < afl->fsrv.map_size; i++) {
+        if (afl->virgin_bits[i] != 255) {
+            coverage_count++;
+        }
+    }
+    
+    return coverage_count;
+}
+
+/* Calculate coverage increase rate */
+double calculate_coverage_increase_rate(u64 old_count, u64 new_count) {
+    if (old_count == 0) return 1.0; // First measurement, assume 100% increase
+    
+    if (new_count <= old_count) return 0.0; // No increase
+    
+    return (double)(new_count - old_count) / (double)old_count;
+}
+
+/* Main coverage monitoring function */
+void check_coverage_and_update_dynamic(afl_state_t* afl) {
+    if (!cov_monitor) return;
+    
+    u64 current_time = get_cur_time();
+    
+    // Check if it's time to evaluate coverage
+    if (current_time - cov_monitor->last_check_time < cov_monitor->coverage_check_interval) {
+        return;
+    }
+    
+    // Update coverage count
+    cov_monitor->current_coverage_count = get_current_coverage_count(afl);
+    
+    // Calculate coverage increase rate
+    double increase_rate = calculate_coverage_increase_rate(
+        cov_monitor->last_coverage_count, 
+        cov_monitor->current_coverage_count
+    );
+    
+    if (afl->debug) {
+        fprintf(stderr, "[debug] Coverage: %llu -> %llu, Rate: %.4f, Threshold: %.4f\n",
+                cov_monitor->last_coverage_count, 
+                cov_monitor->current_coverage_count,
+                increase_rate, 
+                cov_monitor->cov_inc_threshold);
+    }
+    
+    // Check if we need to enable/disable dynamic updating
+    bool should_enable = (increase_rate < cov_monitor->cov_inc_threshold);
+    
+    if (should_enable != cov_monitor->dynamic_enabled) {
+        cov_monitor->dynamic_enabled = should_enable;
+        afl->dynamic_enabled = should_enable;
+        set_dynamic_environment_variable(should_enable);
+        // no need to set the signal, just set the environment variable is enough
+        // if (should_enable) {  
+        //   pass
+        // }
+    }
+    
+    // Update tracking variables
+    cov_monitor->last_coverage_count = cov_monitor->current_coverage_count;
+    cov_monitor->last_check_time = current_time;
+    
+    // Optional: Log periodic coverage stats
+    if (afl->debug || (afl->queue_cycle % 10 == 0)) {
+        ACTF("Coverage: %llu edges, Rate: %.4f%%, Dynamic: %s",
+             cov_monitor->current_coverage_count,
+             increase_rate * 100.0,
+             cov_monitor->dynamic_enabled ? "ON" : "OFF");
+    }
+}
+
+/* Cleanup function */
+void cleanup_coverage_monitor(void) {
+    if (cov_monitor) {
+        free(cov_monitor);
+        cov_monitor = NULL;
+    }
+}
 /* end of funafl code */
 
 static void at_exit() {
@@ -2279,20 +2415,15 @@ int main(int argc, char **argv_orig, char **envp) {
   check_binary(afl, argv[optind]);
 
   /* funafl code */
-  // u8* test_target_path = "../aflpp_benchmarks/zlib/zlib_uncompress_fuzzer";
-  // read_loc2bbs(afl, test_target_path);
-  // read_bb2attributes(afl, test_target_path);
-
   // const char* target_path = argv[optind];
   if (afl->debug)
     fprintf(stderr, "[debug] <1> target_path: %s\n", argv[optind]);
   read_bb2attributes(afl, argv[optind]);
   read_loc2bbs(afl, argv[optind]);
 
-  // if (afl->debug)
-  //   fprintf(stderr, "[debug] <2> target_path: %s\n", argv[optind]);
   // init_dynamic_func_hit_update(argv[optind]); // funafl code to write target_name_function2count.txt
   init_dynamic_func_hit_update(); // funafl code to write target_name_function2count.txt
+  init_coverage_monitor(afl, COV_THREASHOLD, INTERVAL_MILLISECONDS);
   /* end of funafl code */
 
   u64 prev_target_hash = 0;
@@ -2567,43 +2698,6 @@ int main(int argc, char **argv_orig, char **envp) {
   }
 
   afl->argv = use_argv;
-
-  /* funafl code: allocat share memory for function hits information */
-  /*
-  // PATH 1: use independent share memory allocated be fuzzing instead to avoid coupling
-  char *func_hit_id_str = getenv(FUNC_HIT_SHM_ENV_VAR);
-
-  if (func_hit_id_str) {
-
-    int shm_id = atoi(func_hit_id_str);
-    void *shm_ptr = shmat(shm_id, NULL, 0);
-
-    if (!shm_ptr || shm_ptr == (void *)-1) {
-      perror("shmat for FUNC_HIT_SHM failed");
-      shm_ptr = NULL;
-      exit(-19);
-    }
-
-    afl->fsrv.func_hit_map = (u32 *)shm_ptr;
-
-    if (afl->fsrv.func_hit_map && afl->debug) {
-      ACTF("funafl: attached func_hit_map = %p (shm_id=%d)", afl->fsrv.func_hit_map, shm_id);
-    }
-
-  } else {
-    if (afl->debug)
-      ACTF("funafl: FUNC_HIT_SHM_ENV_VAR not set, func_hit_map disabled.");
-    afl->fsrv.func_hit_map = NULL;
-  }
-  */
-
-  // PATH 2: appending bit_map size to store func_hit_map 
-  // afl->fsrv.map_size += EXTEND_SHM_SIZE;
-
-  // PATH 3: use afl_shm_int to allocat independent share memory
-
-
-  /* end of funafl code */
 
   afl->fsrv.trace_bits =
       afl_shm_init(&afl->shm, afl->fsrv.map_size, afl->non_instrumented_mode);
@@ -2948,9 +3042,7 @@ int main(int argc, char **argv_orig, char **envp) {
       afl->total_bitmap_size += q->bitmap_size;
       ++afl->total_bitmap_entries;
       // update_bitmap_score(afl, q);
-      /* funafl code */
-      funafl_update_bitmap_score(afl, q);
-      /* end of funafl code */
+      funafl_update_bitmap_score(afl, q); // funafl code
 
       if (q->was_fuzzed) { --afl->pending_not_fuzzed; }
 
@@ -3118,6 +3210,9 @@ int main(int argc, char **argv_orig, char **envp) {
   afl->start_time = get_cur_time();
 
   while (likely(!afl->stop_soon)) {
+
+    // funafl code: check coverage periodically
+    check_coverage_and_update_dynamic(afl);
 
     /* funafl code: updating bb2attributes by reading new files */
     if (attributes_updating_flag) {
@@ -3701,21 +3796,14 @@ stop_fuzzing:
   destroy_custom_mutators(afl);
   afl_shm_deinit(&afl->shm);
   /* funafl code */
-  // PATH 2: allocate independent shm from third way
-  /*
-  if (afl->fsrv.func_hit_map) {
-
-    shmdt(afl->fsrv.func_hit_map);
-    afl->fsrv.func_hit_map = NULL;
-
-  }
-  */
-
   // PATH 3: allocate indenpendent shm by afl_shm_init() and call afl_shm_deinit() to free it
   if (afl->shm_func_hit) {
     afl_shm_deinit(afl->shm_func_hit);
     ck_free(afl->shm_func_hit);
   }
+
+  // free coverage monitor
+  cleanup_coverage_monitor();
   /* end of funafl code */
 
   if (afl->shm_fuzz) {

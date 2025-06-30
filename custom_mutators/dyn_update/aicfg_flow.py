@@ -34,6 +34,7 @@ get the paths of files
 aicfg_dir = os.environ['FUN_AICFG_DIR']
 target_name = os.environ['TARGET_NAME']
 afl_pid = None
+# dynamic_enable = os.environ['DYNAMIC_ENABLE']
 
 '''
 set constant parameters
@@ -424,15 +425,12 @@ def post_run():
     '''
     Called after each time the execution of the target program by AFL++
     '''
-    # global wl_time, CG, call_count, update_lock, update_interval, wl_time_base
     global wl_time, CG, call_count, update_lock, last_update_time, update_interval_seconds, wl_time_base
+    dynamic_enable = os.environ.get('DYNAMIC_ENABLE', '0')
 
-    # [path 1] execute dynamic adjustment every 1000 calls
-    # call_count += 1
-    # if call_count < update_interval:
-    #     return
+    if dynamic_enable != '1':
+        return
 
-    # [path 2] Check if enough time has passed since last update
     current_time = time.time()
     time_since_last_update = current_time - last_update_time
     if time_since_last_update < update_interval_seconds:

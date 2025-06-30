@@ -78,6 +78,7 @@ static void init_funafl_globals(afl_state_t* afl) {
   afl->record_loc2bbs = NULL;
   afl->bb2count = NULL;
   afl->bb2attributes = NULL;
+  afl->dynamic_enabled = false;
 
   afl->trace_bits_index_when_new_path_is_added = 0;
   afl->count_new_tracebit_index = 0;
