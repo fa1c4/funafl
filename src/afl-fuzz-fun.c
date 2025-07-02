@@ -46,18 +46,6 @@ u32 funafl_get_function_trace_hash(afl_state_t *afl) {
 
     afl->fsrv.func_hit_map[0] = (afl->fsrv.func_hit_map[0] + 1) % FUNC_COUNT;
 
-    // copy the fsrv.trace_bits to afl->fsrv.func_hit_map
-    // u32 index_range = 0;
-    // if (FUNC_COUNT - 1 >= sizeof(afl->fsrv.trace_bits) - 1) {
-    //   index_range = FUNC_COUNT - 1;
-    // } else {
-    //   index_range = sizeof(afl->fsrv.trace_bits) - 1;
-    // }
-    
-    // for (u32 i = 1; i <= index_range; ++i) {
-    //   afl->fsrv.func_hit_map[i] = (afl->fsrv.trace_bits + afl->fsrv.map_size)[i];
-    // }
-
     u32 hash_val = hashArray(afl->fsrv.func_hit_map, 1, 
                               afl->fsrv.func_hit_map[0], 
                               31, FUNC_COUNT);
