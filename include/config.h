@@ -496,9 +496,9 @@
 #define FUNC_HIT_SHM_SIZE MAP_SIZE // 65536 for unsigned int type
 
 /* funafl code: coverage monitor constants*/
-#define COV_THREASHOLD 0.001 // coverage increase rate lower than 0.1% per hour
-#define COV_CHECK_TIME 7200 // 60s for local test. Formally set 7200 seconds (2 hour per check)
-#define INTERVAL_MILLISECONDS COV_CHECK_TIME * 1000 // 7200 * 1000 milliseconds
+#define COV_THREASHOLD 10 // coverage increase rate lower than 10 edges per hour
+#define COV_CHECK_TIME 3600 // 60s for local test. Formally set 3600 seconds (1 hour per check)
+#define INTERVAL_MILLISECONDS COV_CHECK_TIME * 1000 // seconds * 1000 -> milliseconds
 
 /* Maximum allocator request size (keep well under INT_MAX): */
 

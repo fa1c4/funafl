@@ -136,7 +136,7 @@ typedef struct {
     u64 current_coverage_count;
     u64 last_check_time;
     u64 coverage_check_interval;  // in milliseconds
-    double cov_inc_threshold;     // coverage increase threshold (e.g., 0.05 for 5%)
+    u64 cov_inc_threshold;     // coverage increase threshold (e.g., 0.05 for 5%) | 0.9999: double
     bool dynamic_enabled;
 } coverage_monitor_t;
 
@@ -159,8 +159,8 @@ void set_dynamic_environment_variable(bool enable) {
     }
 }
 
-/* Initialize coverage monitoring */
-void init_coverage_monitor(afl_state_t* afl, double threshold, u64 check_interval_ms) {
+/* Initialize coverage monitoring | 0.9999 double threshold */
+void init_coverage_monitor(afl_state_t* afl, u64 threshold, u64 check_interval_ms) {
     cov_monitor = (coverage_monitor_t*)calloc(1, sizeof(coverage_monitor_t));
     if (!cov_monitor) {
         FATAL("Could not allocate coverage monitor");
@@ -173,7 +173,7 @@ void init_coverage_monitor(afl_state_t* afl, double threshold, u64 check_interva
     cov_monitor->cov_inc_threshold = threshold;
     cov_monitor->dynamic_enabled = false;
     
-    ACTF("Coverage monitor initialized with threshold: %.3f, interval: %llu ms", 
+    ACTF("Coverage monitor initialized with threshold: %llu, interval: %llu ms", 
          threshold, check_interval_ms);
 
     // init the environment variable
@@ -196,12 +196,17 @@ u64 get_current_coverage_count(afl_state_t* afl) {
 }
 
 /* Calculate coverage increase rate */
-double calculate_coverage_increase_rate(u64 old_count, u64 new_count) {
-    if (old_count == 0) return 1.0; // First measurement, assume 100% increase
+// double calculate_coverage_increase_rate(u64 old_count, u64 new_count) {
+//     if (old_count == 0) return 1.0; // First measurement, assume 100% increase
     
-    if (new_count <= old_count) return 0.0; // No increase
+//     if (new_count <= old_count) return 0.0; // No increase
     
-    return (double)(new_count - old_count) / (double)old_count;
+//     return (double)(new_count - old_count) / (double)old_count;
+// }
+
+/* Calculate coverage increase count */
+double calculate_coverage_increase_count(u64 old_count, u64 new_count) {
+    return new_count - old_count;
 }
 
 /* Main coverage monitoring function */
@@ -219,21 +224,31 @@ void check_coverage_and_update_dynamic(afl_state_t* afl) {
     cov_monitor->current_coverage_count = get_current_coverage_count(afl);
     
     // Calculate coverage increase rate
-    double increase_rate = calculate_coverage_increase_rate(
-        cov_monitor->last_coverage_count, 
+    // double increase_rate = calculate_coverage_increase_rate(
+    //     cov_monitor->last_coverage_count, 
+    //     cov_monitor->current_coverage_count
+    // );
+
+    u64 increase_count = calculate_coverage_increase_count(
+        cov_monitor->last_coverage_count,
         cov_monitor->current_coverage_count
     );
     
     if (afl->debug) {
-        fprintf(stderr, "[debug] Coverage: %llu -> %llu, Rate: %.4f, Threshold: %.4f\n",
+        // fprintf(stderr, "[debug] Coverage: %llu -> %llu, Rate: %.4f, Threshold: %.4f\n",
+        //         cov_monitor->last_coverage_count, 
+        //         cov_monitor->current_coverage_count,
+        //         increase_count, 
+        //         cov_monitor->cov_inc_threshold);
+        fprintf(stderr, "[debug] Coverage: %llu -> %llu, Rate: %llu, Threshold: %llu\n",
                 cov_monitor->last_coverage_count, 
                 cov_monitor->current_coverage_count,
-                increase_rate, 
+                increase_count, 
                 cov_monitor->cov_inc_threshold);
     }
     
     // Check if we need to enable/disable dynamic updating
-    bool should_enable = (increase_rate < cov_monitor->cov_inc_threshold);
+    bool should_enable = (increase_count <= cov_monitor->cov_inc_threshold);
     
     if (should_enable != cov_monitor->dynamic_enabled) {
         cov_monitor->dynamic_enabled = should_enable;
@@ -250,10 +265,16 @@ void check_coverage_and_update_dynamic(afl_state_t* afl) {
     cov_monitor->last_check_time = current_time;
     
     // Optional: Log periodic coverage stats
+    // if (afl->debug || (afl->queue_cycle % 10 == 0)) {
+    //     ACTF("Coverage: %llu edges, Rate: %.4f%%, Dynamic: %s",
+    //          cov_monitor->current_coverage_count,
+    //          increase_rate * 100.0,
+    //          cov_monitor->dynamic_enabled ? "ON" : "OFF");
+    // }
     if (afl->debug || (afl->queue_cycle % 10 == 0)) {
-        ACTF("Coverage: %llu edges, Rate: %.4f%%, Dynamic: %s",
+        ACTF("Coverage: %llu edges, Rate: %llu/hour, Dynamic: %s",
              cov_monitor->current_coverage_count,
-             increase_rate * 100.0,
+             increase_count,
              cov_monitor->dynamic_enabled ? "ON" : "OFF");
     }
 }
