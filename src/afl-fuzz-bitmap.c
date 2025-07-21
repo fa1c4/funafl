@@ -401,6 +401,16 @@ u8 *describe_op(afl_state_t *afl, u8 new_bits, size_t max_description_len) {
 
   if (non_cov_incr) { strcat(ret, ",+noncov"); }
 
+  /* funafl code: debug to inspect seed score by adding seed score at the end of describtion */
+  if (afl->queue_cur) {
+    size_t current_len = strlen(ret);
+    int score_len = snprintf(NULL, 0, ",score:%.2f", afl->queue_cur->seed_score);
+    
+    if (current_len + score_len < max_description_len) {
+        sprintf(ret + current_len, ",score:%.2f", afl->queue_cur->seed_score);
+    }
+  }
+
   if (unlikely(strlen(ret) >= max_description_len))
     FATAL("describe string is too long");
 
