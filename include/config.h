@@ -575,7 +575,6 @@
 
 
 /* FunAFL configuration */
-// #define FUNC_COUNT (MAP_SIZE * 4) // 65536 * 4 to decrease collision of hash
 #define FUNC_COUNT FUNC_HIT_SHM_SIZE // 65536 max functions
 #define BB_MAX_COUNT 2048 // max bbs count for each function
 #define TYPE_POS_PAIR 1

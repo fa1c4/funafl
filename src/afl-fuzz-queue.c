@@ -265,9 +265,7 @@ void create_alias_table(afl_state_t *afl) {
         q->weight = weight;
 
         // q->perf_score = calculate_score(afl, q);
-        /* funafl code */
-        q->perf_score = funafl_calculate_score(afl, q);
-        /* end of funafl code */
+        q->perf_score = funafl_calculate_score(afl, q); // funafl code
 
         sum += q->weight;
 
@@ -313,9 +311,7 @@ void create_alias_table(afl_state_t *afl) {
       if (likely(!q->disabled)) {
 
         // q->perf_score = calculate_score(afl, q);
-        /* funafl code */
-        q->perf_score = funafl_calculate_score(afl, q);
-        /* end of funafl code */
+        q->perf_score = funafl_calculate_score(afl, q); // funafl code
 
         sum += q->perf_score;
 

@@ -445,10 +445,8 @@ u8 fuzz_one_original(afl_state_t *afl) {
 
       afl->queue_cur->exec_cksum = 0;
 
-      /* funafl code */
       // res = calibrate_case(afl, afl->queue_cur, in_buf, afl->queue_cycle - 1, 0);
-      res = funafl_calibrate_case(afl, afl->queue_cur, in_buf, afl->queue_cycle - 1, 0, 0);
-      /* end of funafl code */
+      res = funafl_calibrate_case(afl, afl->queue_cur, in_buf, afl->queue_cycle - 1, 0, 0); // funafl code
 
       if (unlikely(res == FSRV_RUN_ERROR)) {
 
@@ -514,10 +512,8 @@ u8 fuzz_one_original(afl_state_t *afl) {
   else
     // afl->queue_cur->perf_score = orig_perf = perf_score =
     //     calculate_score(afl, afl->queue_cur);
-    /* funafl code */
     afl->queue_cur->perf_score = orig_perf = perf_score =
-        funafl_calculate_score(afl, afl->queue_cur);
-    /* end of funafl code */
+        funafl_calculate_score(afl, afl->queue_cur); // funafl code
 
   if (unlikely(perf_score <= 0 && afl->active_items > 1)) {
 

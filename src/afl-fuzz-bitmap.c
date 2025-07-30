@@ -232,9 +232,7 @@ inline u8 has_new_bits(afl_state_t *afl, u8 *virgin_map) {
   while (i--) {
 
     // if (unlikely(*current)) discover_word(&ret, current, virgin);
-    /* funafl code */
-    if (unlikely(*current)) funafl_discover_word(afl, &ret, current, virgin);
-    /* end of funafl code */
+    if (unlikely(*current)) funafl_discover_word(afl, &ret, current, virgin); // funafl code
 
     current++;
     virgin++;
@@ -401,13 +399,14 @@ u8 *describe_op(afl_state_t *afl, u8 new_bits, size_t max_description_len) {
 
   if (non_cov_incr) { strcat(ret, ",+noncov"); }
 
-  /* funafl code: debug to inspect seed score by adding seed score at the end of describtion */
+  /* funafl code: <1> debug to inspect seed score by adding seed score at the end of describtion */
+  /*              <2> debug to inspect perf score by adding perf score at the end of describtion */
   if (afl->queue_cur) {
     size_t current_len = strlen(ret);
-    int score_len = snprintf(NULL, 0, ",score:%.2f", afl->queue_cur->seed_score);
+    int score_len = snprintf(NULL, 0, ",score:%.2f", afl->queue_cur->perf_score);
     
     if (current_len + score_len < max_description_len) {
-        sprintf(ret + current_len, ",score:%.2f", afl->queue_cur->seed_score);
+        sprintf(ret + current_len, ",score:%.2f", afl->queue_cur->perf_score);
     }
   }
 
@@ -784,9 +783,7 @@ u8 __attribute__((hot)) save_if_interesting(afl_state_t *afl, void *mem,
     /* Try to calibrate inline; this also calls update_bitmap_score() when
        successful. */
     // res = calibrate_case(afl, afl->queue_top, mem, afl->queue_cycle - 1, 0);
-    /* funafl code */
-    res = funafl_calibrate_case(afl, afl->queue_top, mem, afl->queue_cycle - 1, 0, 0);
-    /* end of funafl code */
+    res = funafl_calibrate_case(afl, afl->queue_top, mem, afl->queue_cycle - 1, 0, 0); // funafl code 
 
     if (unlikely(res == FSRV_RUN_ERROR)) {
 
