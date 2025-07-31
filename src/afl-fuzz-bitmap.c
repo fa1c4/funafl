@@ -399,15 +399,56 @@ u8 *describe_op(afl_state_t *afl, u8 new_bits, size_t max_description_len) {
 
   if (non_cov_incr) { strcat(ret, ",+noncov"); }
 
-  /* funafl code: <1> debug to inspect seed score by adding seed score at the end of describtion */
-  /*              <2> debug to inspect perf score by adding perf score at the end of describtion */
+  /* funafl code: <1> debug to inspect seed score by adding details information at the end of describtion */
   if (afl->queue_cur) {
+    // add execution time
     size_t current_len = strlen(ret);
-    int score_len = snprintf(NULL, 0, ",score:%.2f", afl->queue_cur->perf_score);
+    int exec_time_len = snprintf(NULL, 0, ",exec_time:%llu", afl->queue_cur->exec_us);
+
+    if (current_len + exec_time_len < max_description_len) {
+        sprintf(ret + current_len, ",exec_time:%llu", afl->queue_cur->exec_us);
+    }
+
+    // add perf_score to the end of filename
+    current_len = strlen(ret);
+    int score_len = snprintf(NULL, 0, ",score:%.1f", afl->queue_cur->perf_score);
     
     if (current_len + score_len < max_description_len) {
-        sprintf(ret + current_len, ",score:%.2f", afl->queue_cur->perf_score);
+        sprintf(ret + current_len, ",score:%.1f", afl->queue_cur->perf_score);
     }
+
+    // add seed score
+    current_len = strlen(ret);
+    int seed_score_len = snprintf(NULL, 0, ",seed_score:%.1f", afl->queue_cur->seed_score);
+    
+    if (current_len + seed_score_len < max_description_len) {
+        sprintf(ret + current_len, ",seed_score:%.1f", afl->queue_cur->seed_score);
+    }
+
+    // add energy score
+    current_len = strlen(ret);
+    int energy_score_len = snprintf(NULL, 0, ",energy_score:%.1f", afl->queue_cur->energy_score);
+    
+    if (current_len + energy_score_len < max_description_len) {
+        sprintf(ret + current_len, ",energy_score:%.1f", afl->queue_cur->energy_score);
+    }
+
+    // add mutation time to the end of filename
+    current_len = strlen(ret);
+    int mut_time_len = snprintf(NULL, 0, ",mutus:%llu", afl->queue_cur->mut_time);
+
+    if (current_len + mut_time_len < max_description_len) {
+        sprintf(ret + current_len, ",mutus:%llu", afl->queue_cur->mut_time);
+    }
+
+    // add dynamic flag 
+    current_len = strlen(ret);
+    int dyn_flag_len = snprintf(NULL, 0, ",dynamic:%s", afl->dynamic_enabled ? "true" : "false");
+
+    if (current_len + dyn_flag_len < max_description_len) {
+        sprintf(ret + current_len, ",dynamic:%s", afl->dynamic_enabled ? "true" : "false");
+    }    
+    
   }
 
   if (unlikely(strlen(ret) >= max_description_len))

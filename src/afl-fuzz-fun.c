@@ -745,6 +745,8 @@ store_persistent_record: {
 fsrv_run_result_t __attribute__((hot)) funafl_fuzz_run_target(afl_state_t      *afl,
                                                        afl_forkserver_t *fsrv,
                                                        u32 timeout) {
+  // funafl code: store mutatation time
+  u64 mut_start_us, mut_stop_us;
 
 #ifdef PROFILING
   static u64      time_spent_start = 0;
@@ -785,7 +787,7 @@ fsrv_run_result_t __attribute__((hot)) funafl_fuzz_run_target(afl_state_t      *
 
   /* If post_run() function is defined in custom mutator, the function will be
      called each time after AFL++ executes the target program. */
-
+  mut_start_us = get_cur_time_us();
   if (unlikely(afl->custom_mutators_count)) {
 
     LIST_FOREACH(&afl->custom_mutator_list, struct custom_mutator, {
@@ -799,6 +801,8 @@ fsrv_run_result_t __attribute__((hot)) funafl_fuzz_run_target(afl_state_t      *
     });
 
   }
+  mut_stop_us = get_cur_time_us();
+  afl->mut_time += mut_stop_us - mut_start_us;
 
 #ifdef PROFILING
   clock_gettime(CLOCK_REALTIME, &spec);
@@ -1025,6 +1029,9 @@ u8 funafl_calibrate_case(afl_state_t *afl, struct queue_entry *q, u8 *use_mem,
 
     stop_us = get_cur_time_us();
     diff_us = stop_us - start_us;
+    diff_us -= afl->mut_time; // funafl code: leave over mutatation time
+    q->mut_time = afl->mut_time;
+    afl->mut_time = 0; // reset after cutting off mutation time 
     if (unlikely(!diff_us)) { ++diff_us; }
 
   }

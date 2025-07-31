@@ -261,6 +261,7 @@ struct queue_entry {
   /* funafl variabels */
   d64 seed_score;                     /* score of function attributes     */
   d64 energy_score;                   /* score of function attributes for energy    */
+  u64 mut_time;
 
   u32 function_trace_hash;
 
@@ -909,6 +910,8 @@ typedef struct afl_state {
   u32 not_found_new_hit;
   u32 not_found_base;
   u32 read_success;
+
+  u64 mut_time;
 
 } afl_state_t;
 

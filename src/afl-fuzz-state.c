@@ -106,6 +106,8 @@ static void init_funafl_globals(afl_state_t* afl) {
   afl->not_found_base = 1;
   afl->read_success = 0;
 
+  afl->mut_time = 0;
+
 }
 /* end of funafl code */
 
