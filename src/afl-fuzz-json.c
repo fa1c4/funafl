@@ -578,7 +578,7 @@ struct score_union* funafl_get_score_with_loc_and_update_function_count(struct a
                 fprintf(stderr, "[Error] loc2bbs not found for loc=%d\n", loc);
             continue;
         }
-
+        // loc's [bbs] average score as seed_score & energy_score
         for (uint32_t j = 0; j < tmp_loc2bbs->length; ++j) {
             uint32_t bb_loc = tmp_loc2bbs->bbs[j];
             score_record = get_score_by_bb(afl, bb_loc);

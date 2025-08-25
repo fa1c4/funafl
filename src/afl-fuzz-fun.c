@@ -10,6 +10,7 @@
 #include "afl-fuzz-json.h"
 #include "cmplog.h"
 #include "config.h"
+#include "hash.h"
 // #ifdef WORD_SIZE_64 // will lead to multi-definition errors
 //   #include "coverage-64.h"
 // #else
@@ -42,28 +43,65 @@ u32 hashArray(u32* key, u32 start, u32 len, u32 seed, u32 range) {
 
 }
 
-u32 funafl_get_function_trace_hash(afl_state_t *afl) {
-
-    afl->fsrv.func_hit_map[0] = (afl->fsrv.func_hit_map[0] + 1) % FUNC_COUNT;
-
-    u32 hash_val = hashArray(afl->fsrv.func_hit_map, 1, 
-                              afl->fsrv.func_hit_map[0], 
-                              31, FUNC_COUNT);
+/* New function to calculate difference between current and last function hits */
+u32 funafl_calculate_testcase_func_diff(afl_state_t *afl, u32 *diff_map) {
+    u32 diff_count = 0;
+    u32 i;
     
-    afl->global_function_trace_sum++;
-    if (afl->global_function_trace[hash_val] == 0)
-        afl->global_function_trace_count++;
-    
-    if (afl->global_function_trace_count == 0) {
-        printf("<afl-fuzz-fun> Error: global_function_trace_count is 0");
-        exit(-7);
+    /* Calculate difference between current and last function hit maps */
+    for (i = 0; i < FUNC_COUNT; i++) {
+        if (afl->fsrv.func_hit_map[i] > afl->fsrv.last_func_hit_map[i]) {
+            diff_map[i] = afl->fsrv.func_hit_map[i] - afl->fsrv.last_func_hit_map[i];
+            diff_count++;
+        } else {
+            diff_map[i] = 0;
+        }
     }
-    afl->average_function_trace = (double)afl->global_function_trace_sum / (double)afl->global_function_trace_count;
-    afl->global_function_trace[hash_val]++;
+    
+    return diff_count;
+}
 
-    if (afl->global_function_trace[hash_val] > afl->max_function_trace)
-        afl->max_function_trace = afl->global_function_trace[hash_val];
+void funafl_update_last_func_hit_map(afl_state_t *afl) {
+    if ((TRACE1 || TRACE2) && afl->fsrv.func_hit_map && afl->fsrv.last_func_hit_map)
+      memcpy(afl->fsrv.last_func_hit_map, afl->fsrv.func_hit_map, FUNC_COUNT * sizeof(u32));
+}
 
+/* count the function trace(set) hit times */
+u32 funafl_get_function_trace_hash(afl_state_t *afl) {
+    // define diff map
+    u32 *testcase_diff_map = (u32*)calloc(1, FUNC_COUNT * sizeof(u32));
+    if (testcase_diff_map == NULL) {
+        perror("Memory allocation failed for testcase_diff_map");
+        exit(-17);
+    }
+    
+    /* Calculate differences from last test case */
+    u32 diff_count = funafl_calculate_testcase_func_diff(afl, testcase_diff_map);
+    
+    /* Hash only the differences (functions hit in this test case) using xxHash32 */
+    u32 hash_val = hash32((u8*)testcase_diff_map, FUNC_COUNT * sizeof(u32), 0xFFFFA1C4);
+    hash_val = hash_val % FUNC_COUNT;
+    
+    /* Update statistics based on current testcase function hits only */
+    if (diff_count > 0) {
+        afl->global_function_trace_sum++;
+        if (afl->global_function_trace[hash_val] == 0)
+            afl->global_function_trace_count++;
+        
+        if (afl->global_function_trace_count == 0) {
+            printf("<afl-fuzz-fun> Error: global_function_trace_count is 0");
+            free(testcase_diff_map);
+            exit(-7);
+        }
+        afl->average_function_trace = (double)afl->global_function_trace_sum / (double)afl->global_function_trace_count;
+        afl->global_function_trace[hash_val]++;
+        
+        if (afl->global_function_trace[hash_val] > afl->max_function_trace)
+            afl->max_function_trace = afl->global_function_trace[hash_val];
+    }
+    
+    free(testcase_diff_map);
+    
     return hash_val;
 
 }
@@ -108,8 +146,8 @@ void funafl_print_trace(afl_state_t *afl, const u8* fuzz_out) {
     }
 
     // get function number
-    u32 function_num = afl->fsrv.func_hit_map[0];
-    for (u32 i = 1; i <= function_num; ++i) {
+    u32 function_num = *afl->fsrv.func_hit_map_len;
+    for (u32 i = 0; i <= function_num; ++i) {
         fprintf(fp, "%d ", afl->fsrv.func_hit_map[i]);
     }
     fprintf(fp, "\n");

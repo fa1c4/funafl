@@ -226,6 +226,7 @@ typedef struct afl_forkserver {
   /* FunAFL avariable */
   u32  *func_hit_map_len; /* funafl code: pointer to total counter of func_hit_map */
   u32  *func_hit_map; /* funafl code: pointer to func_hit_map */
+  u32  *last_func_hit_map; /* funafl code: previous test case func_hit_map for diff */
 
 } afl_forkserver_t;
 

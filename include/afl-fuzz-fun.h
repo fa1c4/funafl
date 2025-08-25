@@ -18,6 +18,10 @@
 #include "types.h"
 
 
+u32 funafl_calculate_testcase_func_diff(afl_state_t *afl, u32 *diff_map);
+
+void funafl_update_last_func_hit_map(afl_state_t *afl);
+
 u32 funafl_get_function_trace_hash(afl_state_t *afl);
 
 u32 unsigned_random_num(afl_state_t *afl, u32 limit);

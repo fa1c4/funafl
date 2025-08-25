@@ -270,6 +270,13 @@ void afl_fsrv_init(afl_forkserver_t *fsrv) {
     perror("Memory allocation failed using malloc");
     exit(-16);
   }
+
+  /* Initialize last_func_hit_map for per-testcase tracking */
+  fsrv->last_func_hit_map = (u32*)calloc(1, FUNC_COUNT * sizeof(u32));
+  if (fsrv->last_func_hit_map == NULL) {
+    perror("Memory allocation failed using malloc for last_func_hit_map");
+    exit(-16);
+  }
   /* end of funafl code */
 
   fsrv->init_child_func = fsrv_exec_child;

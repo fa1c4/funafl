@@ -6238,6 +6238,9 @@ u8 fuzz_one(afl_state_t *afl) {
     }
 
   }
+  
+  /* funafl code: update last_func_hit_map after testcase processing is complete */
+  funafl_update_last_func_hit_map(afl);
 
   if (unlikely(key_val_lv_1 == -1)) { key_val_lv_1 = 0; }
   if (likely(key_val_lv_2 == -1)) { key_val_lv_2 = 0; }

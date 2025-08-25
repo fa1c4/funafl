@@ -403,11 +403,11 @@ u8 *describe_op(afl_state_t *afl, u8 new_bits, size_t max_description_len) {
   if (afl->queue_cur) {
     // add execution time
     size_t current_len = strlen(ret);
-    int exec_time_len = snprintf(NULL, 0, ",exec_time:%llu", afl->queue_cur->exec_us);
+    // int exec_time_len = snprintf(NULL, 0, ",exec_time:%llu", afl->queue_cur->exec_us);
 
-    if (current_len + exec_time_len < max_description_len) {
-        sprintf(ret + current_len, ",exec_time:%llu", afl->queue_cur->exec_us);
-    }
+    // if (current_len + exec_time_len < max_description_len) {
+    //     sprintf(ret + current_len, ",exec_time:%llu", afl->queue_cur->exec_us);
+    // }
 
     // add perf_score to the end of filename
     current_len = strlen(ret);
