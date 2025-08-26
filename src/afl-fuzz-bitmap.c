@@ -447,7 +447,15 @@ u8 *describe_op(afl_state_t *afl, u8 new_bits, size_t max_description_len) {
 
     if (current_len + dyn_flag_len < max_description_len) {
         sprintf(ret + current_len, ",dynamic:%s", afl->dynamic_enabled ? "true" : "false");
-    }    
+    }
+
+    // add function_trace hit times
+    current_len = strlen(ret);
+    int trace_len = snprintf(NULL, 0, ",trace_hit:%u", afl->global_function_trace[afl->queue_cur->function_trace_hash]);
+
+    if (current_len + trace_len < max_description_len) {
+        sprintf(ret + current_len, ",trace_hit:%u", afl->global_function_trace[afl->queue_cur->function_trace_hash]);
+    }
     
   }
 
