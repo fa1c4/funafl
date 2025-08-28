@@ -832,7 +832,7 @@ u8 __attribute__((hot)) save_if_interesting(afl_state_t *afl, void *mem,
     /* Try to calibrate inline; this also calls update_bitmap_score() when
        successful. */
     // res = calibrate_case(afl, afl->queue_top, mem, afl->queue_cycle - 1, 0);
-    res = funafl_calibrate_case(afl, afl->queue_top, mem, afl->queue_cycle - 1, 0, 0); // funafl code 
+    res = funafl_calibrate_case(afl, afl->queue_top, mem, afl->queue_cycle - 1, 0); // funafl code 
 
     if (unlikely(res == FSRV_RUN_ERROR)) {
 

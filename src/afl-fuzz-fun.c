@@ -78,8 +78,8 @@ u32 funafl_get_function_trace_hash(afl_state_t *afl) {
     /* Calculate differences from last test case */
     u32 diff_count = funafl_calculate_testcase_func_diff(afl, testcase_diff_map);
     
-    /* Hash only the differences (functions hit in this test case) using xxHash32 */
-    u32 hash_val = hash32((u8*)testcase_diff_map, FUNC_COUNT * sizeof(u32), 0xFFFFA1C4);
+    /* Hash only the differences (functions hit in this test case) using hash64 */
+    u32 hash_val = hash64((u8*)testcase_diff_map, FUNC_COUNT * sizeof(u32), HASH_CONST);
     hash_val = hash_val % FUNC_COUNT;
     
     /* Update statistics based on current testcase function hits only */
@@ -858,7 +858,7 @@ fsrv_run_result_t __attribute__((hot)) funafl_fuzz_run_target(afl_state_t      *
    new paths are discovered to detect variable behavior and so on. */
 
 u8 funafl_calibrate_case(afl_state_t *afl, struct queue_entry *q, u8 *use_mem,
-                  u32 handicap, u8 from_queue, u8 cali_flag) {
+                  u32 handicap, u8 from_queue) {
 
   u8 fault = 0, new_bits = 0, var_detected = 0, hnb = 0,
      first_run = (q->exec_cksum == 0);
@@ -995,22 +995,21 @@ u8 funafl_calibrate_case(afl_state_t *afl, struct queue_entry *q, u8 *use_mem,
       hnb = funafl_has_new_bits(afl, afl->virgin_bits);
       if (hnb > new_bits) { new_bits = hnb; }
 
-        /* funafl code */
-        if (cali_flag) {
-            if (SEED || ENERGY) {
-                afl->method_change++;
-                struct score_union* sc = funafl_get_score_with_loc_and_update_function_count(afl,
-                    afl->new_tracebit_index, afl->count_new_tracebit_index);
-                
-                q->seed_score = sc->seed_score;
-                q->energy_score = sc->energy_score;
-                free(sc);
-            }
+      /* funafl code */
+      if (SEED || ENERGY) {
+          afl->method_change++;
+          struct score_union* sc = funafl_get_score_with_loc_and_update_function_count(afl,
+              afl->new_tracebit_index, afl->count_new_tracebit_index);
+          
+          q->seed_score = sc->seed_score;
+          q->energy_score = sc->energy_score;
+          free(sc);
+      }
 
-            if (TRACE1 || TRACE2) {
-                q->function_trace_hash = funafl_get_function_trace_hash(afl);
-            }
-        }
+      if (TRACE1 || TRACE2) {
+          q->function_trace_hash = funafl_get_function_trace_hash(afl);
+      }
+      
 
       if (q->exec_cksum) {
 
@@ -1462,7 +1461,7 @@ u8 __attribute__((hot)) funafl_save_if_interesting(afl_state_t *afl, void *mem, 
 
     /* funafl code */
     // res = calibrate_case(afl, afl->queue_top, mem, afl->queue_cycle - 1, 0);
-    res = funafl_calibrate_case(afl, afl->queue_top, mem, afl->queue_cycle - 1, 0, 0);
+    res = funafl_calibrate_case(afl, afl->queue_top, mem, afl->queue_cycle - 1, 0);
     /* end of funafl code */
 
     if (unlikely(res == FSRV_RUN_ERROR)) {
