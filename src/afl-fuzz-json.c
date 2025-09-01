@@ -213,19 +213,19 @@ void add_bb_count_key(struct afl_state* afl, uint32_t bb_loc_val) {
 }
 
 
-void add_bb_count(struct afl_state* afl, uint32_t bb) {
+void add_bb_count(struct afl_state* afl, uint32_t bb_addr) {
     struct basic_block_count *bbc = NULL;
-    HASH_FIND_INT(afl->bb2count, &bb, bbc);
+    HASH_FIND_INT(afl->bb2count, &bb_addr, bbc);
     if (bbc == NULL) {
-        ACTF("<add_bb_count> bb not found in bb2count: %d\n", bb);
-        exit(-5);
+        ACTF("<add_bb_count> bb not found in bb2count: %d\n", bb_addr);
+        exit(5);
     }
 
     // add bb->count
     bbc->count++;
     if (bbc->count > 2147483600) {
         ACTF("<add_bb_count> bb count overflow\n");
-        exit(-6);
+        exit(6);
     }
 }
 
@@ -543,106 +543,19 @@ void read_loc2bbs(struct afl_state* afl, u8* target_path) {
 }
 
 
-struct score_union* get_score_by_bb(struct afl_state* afl, uint32_t bb_loc) {
+struct score_union* get_score_by_bb(struct afl_state* afl, uint32_t bb_addr) {
 
     struct basic_blocks* cur_bb = NULL;
-    HASH_FIND_INT(afl->bb2attributes, &bb_loc, cur_bb);
+    HASH_FIND_INT(afl->bb2attributes, &bb_addr, cur_bb);
     if (cur_bb == NULL) {
-        // fprintf(stderr, "Error: bb not found in bb2attributes\n");
+        fprintf(stderr, "Error: bb not found in bb2attributes\n");
         return NULL;
     }
 
-    add_bb_count(afl, bb_loc);
+    add_bb_count(afl, bb_addr);
     struct score_union* sc = (struct score_union*)calloc(1, sizeof(struct score_union));
     sc->seed_score = cur_bb->score_seed;
     sc->energy_score = cur_bb->score_energy;
 
     return sc;
-}
-
-
-struct score_union* funafl_get_score_with_loc_and_update_function_count(struct afl_state* afl,
-    uint32_t new_tracebit_index[], uint32_t count_new_tracebit_index) {
-    
-    double score_seed = 0.0, score_energy = 0.0;
-    struct score_union* score_record = NULL;
-    uint32_t bb_num = 0, bb_num_energy = 0;
-
-    // get score for each bb
-    for (uint32_t i = 0; i < count_new_tracebit_index; ++i) {
-        uint32_t loc = new_tracebit_index[i];
-        struct loc2bbs* tmp_loc2bbs = NULL;
-        HASH_FIND_INT(afl->record_loc2bbs, &loc, tmp_loc2bbs);
-        if (tmp_loc2bbs == NULL) {
-            if (afl->debug)
-                fprintf(stderr, "[Error] loc2bbs not found for loc=%d\n", loc);
-            continue;
-        }
-        // loc's [bbs] average score as seed_score & energy_score
-        for (uint32_t j = 0; j < tmp_loc2bbs->length; ++j) {
-            uint32_t bb_loc = tmp_loc2bbs->bbs[j];
-            score_record = get_score_by_bb(afl, bb_loc);
-
-            if (score_record == NULL) {
-                fprintf(stderr, "Error: score record not found for loc=0x%x\n", bb_loc);
-                continue;
-            }
-
-            score_seed += score_record->seed_score;
-            score_energy += score_record->energy_score;
-            if (!double_is_equal(score_record->seed_score, 0.0)) {
-                bb_num++;
-            }
-            if (!double_is_equal(score_record->energy_score, 0.0)) {
-                bb_num_energy++;
-            }
-            
-            free(score_record);
-        }
-    }
-
-    // update score
-    struct score_union* res = (struct score_union*)calloc(1, sizeof(struct score_union));
-    // calculate average score for seed and energy
-    res->seed_score = bb_num == 0?
-                        afl->average_score:
-                        score_seed / (double)bb_num;
-
-    res->energy_score = bb_num_energy == 0?
-                        afl->average_score_energy:
-                        score_energy / (double)bb_num_energy;
-    
-    // update sum score
-    afl->sum_score += res->seed_score;
-    afl->sum_score_energy += res->energy_score;
-
-    // calculate average score
-    if (afl->number_score == 0) {
-        fprintf(stderr, "<afl-fuzz-json> Error: number_score is 0\n");
-        exit(-4);
-    }
-    if (afl->number_score_energy == 0) {
-        fprintf(stderr, "<afl-fuzz-json> Error: number_score_energy is 0\n");
-        exit(-4);
-    }
-    afl->average_score = afl->sum_score / (double)afl->number_score;
-    afl->average_score_energy = afl->sum_score_energy / (double)afl->number_score_energy;
-
-    // update max and min score
-    if (res->seed_score > afl->max_score) {
-        afl->max_score = res->seed_score;
-    }
-    if (res->seed_score < afl->min_score) {
-        afl->min_score = res->seed_score;
-    }
-
-    ++afl->number_score;
-    ++afl->number_score_energy;
-    if (afl->number_score > 2147483600 || afl->number_score_energy > 2147483600) {
-        fprintf(stderr, "Error: score overflow\n");
-        afl->number_score = 1;
-        afl->number_score_energy = 1;
-    }
-
-    return res;
 }

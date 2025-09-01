@@ -80,17 +80,13 @@ static void init_funafl_globals(afl_state_t* afl) {
   afl->bb2attributes = NULL;
   afl->dynamic_enabled = false;
 
-  afl->trace_bits_index_when_new_path_is_added = 0;
-  afl->count_new_tracebit_index = 0;
-  memset(afl->new_tracebit_index, 0, sizeof(afl->new_tracebit_index));
-
   afl->average_score = 1.0;
   afl->sum_score = 0.0;
-  afl->number_score = 1; // avoid division by zero
+  afl->number_score = 0; // avoid division by zero at the calculation logic
 
   afl->average_score_energy = 1.0;
   afl->sum_score_energy = 0.0;
-  afl->number_score_energy = 1; // avoid division by zero
+  afl->number_score_energy = 0; // avoid division by zero at the calculation logic
   afl->max_score = 0.0;
   afl->min_score = FLT_MAX;
 

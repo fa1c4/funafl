@@ -66,13 +66,31 @@ void funafl_update_last_func_hit_map(afl_state_t *afl) {
       memcpy(afl->fsrv.last_func_hit_map, afl->fsrv.func_hit_map, FUNC_COUNT * sizeof(u32));
 }
 
+
+void funafl_get_testcase_func_locs(struct afl_state* afl, u32* testcase_hit_locs) {
+    u32 diff_count = 0;
+    
+    for (u32 i = 0; i < FUNC_COUNT && diff_count < FUNC_COUNT - 1; i++) {
+        if (afl->fsrv.func_hit_map[i] > afl->fsrv.last_func_hit_map[i]) {
+            testcase_hit_locs[diff_count] = i;
+            diff_count++;
+        }
+    }
+    testcase_hit_locs[diff_count] = 0; // set 0 to terminate the array
+
+    if (afl->debug && diff_count > 0) {
+        fprintf(stderr, "[DEBUG] Found %u functions with increased hits\n", diff_count);
+    }
+}
+
+
 /* count the function trace(set) hit times */
 u32 funafl_get_function_trace_hash(afl_state_t *afl) {
     // define diff map
     u32 *testcase_diff_map = (u32*)calloc(1, FUNC_COUNT * sizeof(u32));
     if (testcase_diff_map == NULL) {
         perror("Memory allocation failed for testcase_diff_map");
-        exit(-17);
+        exit(17);
     }
     
     /* Calculate differences from last test case */
@@ -91,7 +109,7 @@ u32 funafl_get_function_trace_hash(afl_state_t *afl) {
         if (afl->global_function_trace_count == 0) {
             printf("<afl-fuzz-fun> Error: global_function_trace_count is 0");
             free(testcase_diff_map);
-            exit(-7);
+            exit(7);
         }
         afl->average_function_trace = (double)afl->global_function_trace_sum / (double)afl->global_function_trace_count;
         afl->global_function_trace[hash_val]++;
@@ -104,6 +122,99 @@ u32 funafl_get_function_trace_hash(afl_state_t *afl) {
     
     return hash_val;
 
+}
+
+
+struct score_union* funafl_get_score_for_function_trace(struct afl_state* afl) {
+    
+    double score_seed = 0.0, score_energy = 0.0;
+    struct score_union* score_record = NULL;
+    u32 bb_num = 0, bb_num_energy = 0;
+
+    u32 *testcase_hit_locs = (u32*)calloc(1, FUNC_COUNT * sizeof(u32));
+    if (testcase_hit_locs == NULL) {
+        perror("Memory allocation failed for testcase_hit_locs");
+        exit(17);
+    }
+    
+    /* Calculate differences from last test case */
+    funafl_get_testcase_func_locs(afl, testcase_hit_locs);
+
+    // get score for each function hit by current testcase and its bbs
+    for (u32 i = 0; i < FUNC_COUNT; ++i) {
+        if (testcase_hit_locs[i] == 0) break;
+        u32 cur_loc = afl->fsrv.loc2curloc_map[testcase_hit_locs[i]];
+
+        struct loc2bbs* tmp_loc2bbs = NULL;
+        HASH_FIND_INT(afl->record_loc2bbs, &cur_loc, tmp_loc2bbs);
+        if (tmp_loc2bbs == NULL) {
+            if (afl->debug) fprintf(stderr, "[Error] loc2bbs not found for loc=%d\n", cur_loc);
+            continue;
+        }
+        // function cur_loc's [bbs] average score as seed_score & energy_score
+        for (u32 j = 0; j < tmp_loc2bbs->length; ++j) {
+            u32 bb_addr = tmp_loc2bbs->bbs[j];
+            score_record = get_score_by_bb(afl, bb_addr);
+
+            if (score_record == NULL) {
+                fprintf(stderr, "Error: score record not found for loc=0x%x\n", bb_addr);
+                continue;
+            }
+
+            score_seed += score_record->seed_score;
+            score_energy += score_record->energy_score;
+            if (!double_is_equal(score_record->seed_score, 0.0)) {
+                bb_num++;
+            }
+            if (!double_is_equal(score_record->energy_score, 0.0)) {
+                bb_num_energy++;
+            }
+            
+            free(score_record);
+        }
+    }
+
+    // update score
+    struct score_union* res = (struct score_union*)calloc(1, sizeof(struct score_union));
+    // calculate average score for seed and energy
+    res->seed_score = bb_num == 0?
+                        afl->average_score:
+                        score_seed / (double)bb_num;
+
+    res->energy_score = bb_num_energy == 0?
+                        afl->average_score_energy:
+                        score_energy / (double)bb_num_energy;
+    
+    // update sum score
+    afl->sum_score += res->seed_score;
+    afl->sum_score_energy += res->energy_score;
+    ++afl->number_score;
+    ++afl->number_score_energy;
+
+    // calculate average score
+    if (afl->number_score == 0) {
+        fprintf(stderr, "<afl-fuzz-json> Error: number_score is 0\n");
+        exit(4);
+    }
+    if (afl->number_score_energy == 0) {
+        fprintf(stderr, "<afl-fuzz-json> Error: number_score_energy is 0\n");
+        exit(4);
+    }
+    afl->average_score = afl->sum_score / (double)afl->number_score;
+    afl->average_score_energy = afl->sum_score_energy / (double)afl->number_score_energy;
+
+    // update max and min score
+    if (res->seed_score > afl->max_score) {
+        afl->max_score = res->seed_score;
+    }
+    if (res->seed_score < afl->min_score) {
+        afl->min_score = res->seed_score;
+    }
+
+    // free testcase_hit_locs 
+    free(testcase_hit_locs);
+
+    return res;
 }
 
 
@@ -159,24 +270,9 @@ void funafl_print_trace(afl_state_t *afl, const u8* fuzz_out) {
 }
 
 
-void funafl_get_trace_bits_set_bits(afl_state_t *afl) {
-    afl->count_new_tracebit_index = 0;
-    for (u32 i = 0; i < MAP_SIZE; ++i) {
-        if (afl->fsrv.trace_bits[i]) {
-            if (afl->count_new_tracebit_index >= FUNC_COUNT) {
-                printf("The number of new trace bits exceeds 65536, please check the code\n");
-                exit(-1);
-            }    
-
-            afl->new_tracebit_index[afl->count_new_tracebit_index++] = i;
-        }
-    }
-}
-
-
 /* Updates the virgin bits, then reflects whether a new count or a new tuple is
  * seen in ret. */
-void funafl_discover_word(afl_state_t *afl, u8 *ret, u64 *current, u64 *virgin) {
+void funafl_discover_word(u8 *ret, u64 *current, u64 *virgin) {
     /* Optimize for (*current & *virgin) == 0 - i.e., no bits in current bitmap
        that have not been already cleared from the virgin map - since this will
        almost always be the case. */
@@ -195,32 +291,6 @@ void funafl_discover_word(afl_state_t *afl, u8 *ret, u64 *current, u64 *virgin) 
                 (cur[6] && vir[6] == 0xff) || (cur[7] && vir[7] == 0xff)) {
                     
                     *ret = 2;
-                    if ((SEED | ENERGY) && (afl->method_change >= METHOD_CHANGE_TIMES)) {
-                        u8* cur_int = cur;
-                        u8* trace_int = afl->fsrv.trace_bits;
-                        afl->trace_bits_index_when_new_path_is_added = cur_int - trace_int;
-                        u32 origin_trace_bits_index_when_new_path_is_added = afl->trace_bits_index_when_new_path_is_added;
-                        
-                        for (u64 trace_j = 0; trace_j < 8; ++trace_j) {
-                            
-                            if (cur[trace_j] && vir[trace_j] == 0xff) {
-                                afl->trace_bits_index_when_new_path_is_added += trace_j;
-
-                                if (afl->count_new_tracebit_index < 65536) {
-                                    afl->new_tracebit_index[afl->count_new_tracebit_index++] = afl->trace_bits_index_when_new_path_is_added;
-                                    if (afl->debug) {
-                                      fprintf(stderr, "[DEBUG] New trace index: %u\n", afl->new_tracebit_index[afl->count_new_tracebit_index - 1]);
-                                    }
-                                } else {
-                                    printf("The number of new trace bits exceeds 65536, please check the code\n");
-                                    exit(-1);
-                                }
-
-                                afl->trace_bits_index_when_new_path_is_added = origin_trace_bits_index_when_new_path_is_added;
-                            }
-
-                        }
-                    }
 
             }
             else
@@ -236,15 +306,6 @@ void funafl_discover_word(afl_state_t *afl, u8 *ret, u64 *current, u64 *virgin) 
 
 
 u8 funafl_has_new_bits(afl_state_t *afl, u8* virgin_map) {
-
-    bool trace_flag = true;
-    if ((SEED | ENERGY) && (afl->method_change < METHOD_CHANGE_TIMES)) {
-        trace_flag = false;
-        funafl_get_trace_bits_set_bits(afl);
-    } else {
-        memset(afl->new_tracebit_index, 0, 65536 * sizeof(u32));
-        afl->count_new_tracebit_index = 0;
-    }
 
 #ifdef WORD_SIZE_64
 
@@ -265,15 +326,12 @@ u8 funafl_has_new_bits(afl_state_t *afl, u8* virgin_map) {
     u8 ret = 0;
     while (i--) {
   
-        if (unlikely(*current)) funafl_discover_word(afl, &ret, current, virgin);
+        if (unlikely(*current)) funafl_discover_word(&ret, current, virgin);
     
         current++;
         virgin++;
   
     }
-
-    if (trace_flag && afl->count_new_tracebit_index == 0)
-        funafl_get_trace_bits_set_bits(afl);
   
     if (unlikely(ret) && likely(virgin_map == afl->virgin_bits))
         afl->bitmap_changed = 1;
@@ -455,7 +513,7 @@ fsrv_run_result_t __attribute__((hot)) funafl_fsrv_run_target(
 #ifdef __linux__
   if (fsrv->nyx_mode) {
 
-    static uint32_t last_timeout_value = 0;
+    static u32 last_timeout_value = 0;
 
     if (last_timeout_value != timeout) {
 
@@ -526,6 +584,8 @@ fsrv_run_result_t __attribute__((hot)) funafl_fsrv_run_target(
 
         /* funafl code */
         memset(fsrv->func_hit_map, 0, FUNC_COUNT * sizeof(u32));
+        
+        memset(fsrv->loc2curloc_map, 0, MAP_SIZE * sizeof(u32));
         /* end of funafl code */
 
         MEM_BARRIER();
@@ -537,6 +597,8 @@ fsrv_run_result_t __attribute__((hot)) funafl_fsrv_run_target(
     
     /* funafl code */
     memset(fsrv->func_hit_map, 0, FUNC_COUNT * sizeof(u32));
+
+    memset(fsrv->loc2curloc_map, 0, MAP_SIZE * sizeof(u32));
     /* end of funafl code */
     
     MEM_BARRIER();
@@ -994,8 +1056,7 @@ u8 funafl_calibrate_case(afl_state_t *afl, struct queue_entry *q, u8 *use_mem,
       /* funafl code */
       if (SEED || ENERGY) {
           afl->method_change++;
-          struct score_union* sc = funafl_get_score_with_loc_and_update_function_count(afl,
-              afl->new_tracebit_index, afl->count_new_tracebit_index);
+          struct score_union* sc = funafl_get_score_for_function_trace(afl);
           
           q->seed_score = sc->seed_score;
           q->energy_score = sc->energy_score;
@@ -1369,8 +1430,7 @@ u8 __attribute__((hot)) funafl_save_if_interesting(afl_state_t *afl, void *mem, 
     if (SEED || ENERGY) {
 
         afl->method_change++;
-        struct score_union* sc = funafl_get_score_with_loc_and_update_function_count(afl,
-            afl->new_tracebit_index, afl->count_new_tracebit_index);
+        struct score_union* sc = funafl_get_score_for_function_trace(afl);
         
         afl->queue_top->seed_score = sc->seed_score;
         afl->queue_top->energy_score = sc->energy_score;

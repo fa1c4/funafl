@@ -423,6 +423,7 @@
 #define SHM_ENV_VAR "__AFL_SHM_ID"
 
 #define FUNC_HIT_SHM_ENV_VAR "__AFL_FUNC_HIT_SHM_ID" /* funafl function hit share memory environment variable */
+#define LOC2CURLOC_SHM_ENV_VAR "__AFL_LOC2CURLOC_SHM_ID" /* AFL dynamic loc mapping to curloc share memory environment variable */
 
 /* Environment variable used to pass SHM FUZZ ID to the called program. */
 

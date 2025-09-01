@@ -2927,6 +2927,37 @@ void setup_func_hit_shmem(afl_state_t *afl) {
     SAYF("Function hit shared memory initialized: %p\n", func_hit_map);
   }
 }
+
+void setup_loc2curloc_shmem(afl_state_t *afl) {
+  
+  afl->shm_loc2curloc= ck_alloc(sizeof(sharedmem_t));
+  
+  // Initialize shared memory for loc2curloc map
+  // Size is MAP_SIZE * sizeof(u32)
+  u32 *loc2curloc_map = (u32 *)afl_shm_init(afl->shm_loc2curloc, 
+                                          (MAP_SIZE + 1) * sizeof(u32), 0); // 0 = instrumented mode
+  
+  if (!loc2curloc_map) { 
+    FATAL("BUG: Zero return from afl_shm_init for loc2curloc map."); 
+  }
+
+  // Set environment variable for the runtime to find the shared memory
+#ifdef USEMMAP
+  setenv(LOC2CURLOC_SHM_ENV_VAR, afl->shm_loc2curloc->g_shm_file_path, 1);
+#else
+  u8 *shm_str = alloc_printf("%d", afl->shm_loc2curloc->shm_id);
+  setenv(LOC2CURLOC_SHM_ENV_VAR, shm_str, 1);
+  ck_free(shm_str);
+#endif
+
+  // Store reference for later use
+  afl->fsrv.loc2curloc_map_len = (u32 *)loc2curloc_map;
+  afl->fsrv.loc2curloc_map = (u32 *)loc2curloc_map + 1;
+
+  if (afl->debug) {
+    SAYF("Function hit shared memory initialized: %p\n", loc2curloc_map);
+  }
+}
 /* end of funafl code */
 
 /* Do a PATH search and find target binary to see that it exists and

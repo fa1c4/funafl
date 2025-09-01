@@ -224,9 +224,12 @@ typedef struct afl_forkserver {
   void (*late_send)(void *, const u8 *, size_t);
 
   /* FunAFL avariable */
-  u32  *func_hit_map_len; /* funafl code: pointer to total counter of func_hit_map */
-  u32  *func_hit_map; /* funafl code: pointer to func_hit_map */
-  u32  *last_func_hit_map; /* funafl code: previous test case func_hit_map for diff */
+  u32  *func_hit_map_len; /* funafl: pointer to total counter of func_hit_map */
+  u32  *func_hit_map; /* funafl: pointer to func_hit_map */
+  u32  *last_func_hit_map; /* funafl: previous test case func_hit_map for diff */
+
+  u32 *loc2curloc_map_len; /* funafl: pointer to total counter of loc2curloc_map */
+  u32 *loc2curloc_map; /* funafl: pointer to loc2curloc_map */
 
 } afl_forkserver_t;
 

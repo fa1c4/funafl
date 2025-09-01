@@ -79,12 +79,9 @@ void print_bb2attributes_not_first(struct basic_blocks *bbs);
 
 void write_bb_count(struct afl_state* afl, u8 *base_name);
 
-void add_bb_count(struct afl_state* afl, uint32_t bb);
+void add_bb_count(struct afl_state* afl, uint32_t bb_addr);
 
-struct score_union* get_score_by_bb(struct afl_state* afl, uint32_t bb);
-
-struct score_union* funafl_get_score_with_loc_and_update_function_count(struct afl_state* afl, 
-    uint32_t new_tracebit_index[], uint32_t count_new_tracebit_index);
+struct score_union* get_score_by_bb(struct afl_state* afl, uint32_t bb_addr);
 
 // void init_dynamic_func_hit_update(u8* target_path);
 void init_dynamic_func_hit_update();

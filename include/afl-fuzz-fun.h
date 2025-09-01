@@ -24,13 +24,15 @@ void funafl_update_last_func_hit_map(afl_state_t *afl);
 
 u32 funafl_get_function_trace_hash(afl_state_t *afl);
 
+struct score_union* funafl_get_score_for_function_trace(struct afl_state* afl);
+
 u32 unsigned_random_num(afl_state_t *afl, u32 limit);
 
 void funafl_print_trace(afl_state_t *afl, const u8 *fuzz_out);
 
 void funafl_get_trace_bits_set_bits(afl_state_t *afl);
 
-void funafl_discover_word(afl_state_t *afl, u8 *ret, u64 *current, u64 *virgin);
+void funafl_discover_word(u8 *ret, u64 *current, u64 *virgin);
 
 u8 funafl_has_new_bits(afl_state_t *afl, u8 *virgin_map);
 
@@ -51,5 +53,7 @@ u8 __attribute__((hot)) funafl_save_if_interesting(afl_state_t *afl, void *mem, 
 u32 funafl_calculate_score(afl_state_t *afl, struct queue_entry *q);
 
 void setup_func_hit_shmem(afl_state_t *afl);
+
+void setup_loc2curloc_shmem(afl_state_t *afl);
 
 #endif // _AFL_FUZZ_FUN_H

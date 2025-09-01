@@ -232,7 +232,7 @@ inline u8 has_new_bits(afl_state_t *afl, u8 *virgin_map) {
   while (i--) {
 
     // if (unlikely(*current)) discover_word(&ret, current, virgin);
-    if (unlikely(*current)) funafl_discover_word(afl, &ret, current, virgin); // funafl code
+    if (unlikely(*current)) funafl_discover_word(&ret, current, virgin); // funafl code
 
     current++;
     virgin++;

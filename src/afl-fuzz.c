@@ -2660,7 +2660,9 @@ int main(int argc, char **argv_orig, char **envp) {
 
   if (afl->shmem_testcase_mode) { setup_testcase_shmem(afl); }
 
-  setup_func_hit_shmem(afl); /* funafl code: setup the shm for func_hit_map */
+  setup_func_hit_shmem(afl); /* funafl: setup the shm for func_hit_map */
+
+  setup_loc2curloc_shmem(afl); /* funafl: setup the shm for loc2curloc map */
 
   afl->start_time = get_cur_time();
 
@@ -3821,6 +3823,11 @@ stop_fuzzing:
   if (afl->shm_func_hit) {
     afl_shm_deinit(afl->shm_func_hit);
     ck_free(afl->shm_func_hit);
+  }
+
+  if (afl->shm_loc2curloc) {
+    afl_shm_deinit(afl->shm_loc2curloc);
+    ck_free(afl->shm_loc2curloc);
   }
 
   // free coverage monitor

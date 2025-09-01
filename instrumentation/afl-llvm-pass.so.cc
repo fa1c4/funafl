@@ -433,7 +433,19 @@ bool AFLCoverage::runOnModule(Module &M) {
       fprintf(stderr, "AFLFuncHitPtr successfully created at address: %p\n", AFLFuncHitPtr);
   } else {
       fprintf(stderr, "Failed to create AFLFuncHitPtr\n");
-      exit(-20);
+      exit(20);
+  }
+
+  static GlobalVariable *AFLLoc2CurlocPtr = NULL;
+  AFLLoc2CurlocPtr = new GlobalVariable(
+    M, PointerType::get(Int32Ty, 0), false,
+    GlobalValue::ExternalLinkage, 0, "__afl_loc2curloc_ptr");
+
+  if (AFLLoc2CurlocPtr) {
+      fprintf(stderr, "AFLLoc2CurlocPtr successfully created at address: %p\n", AFLLoc2CurlocPtr);
+  } else {
+      fprintf(stderr, "Failed to create AFLLoc2CurlocPtr\n");
+      exit(20);
   }
   /* end of funafl code */
   
@@ -542,50 +554,6 @@ bool AFLCoverage::runOnModule(Module &M) {
 
   int inst_blocks = 0;
   scanForDangerousFunctions(&M);
-
-  /* 
-  // old version funafl code
-  for (auto &F : M) {
-
-    auto BBF = &F.getEntryBlock();
-    BasicBlock::iterator IPF = BBF->getFirstInsertionPt();
-    IRBuilder<> IRBF(&(*IPF)); 
-
-    fprintf(stderr, "Inserting __afl_func_hit_ptr for function: %s\n", F.getName().str().c_str());
-
-    LoadInst *AFLFuncHitPtrInst = IRBF.CreateLoad(PointerType::get(Int32Ty, 0), AFLFuncHitPtr);
-    AFLFuncHitPtrInst->setMetadata(M.getMDKindID("nosanitize"), MDNode::get(C, None));
-
-    uint64_t fn_hash = F.getGUID() % FUNC_HIT_SHM_SIZE;
-    if (debug)
-      fprintf(stderr, "Function %s -> hash = %lu\n", F.getName().str().c_str(), fn_hash);
-
-    ConstantInt *Index = ConstantInt::get(Int32Ty, fn_hash);
-
-    Value *Slot = IRBF.CreateGEP(Int32Ty, AFLFuncHitPtrInst, Index);
-    
-    // thread unsafe
-    LoadInst *OldCount = IRBF.CreateLoad(Int32Ty, Slot);
-    OldCount->setMetadata(M.getMDKindID("nosanitize"), MDNode::get(C, None));
-
-    Value *NewCount = IRBF.CreateAdd(OldCount, ConstantInt::get(Int32Ty, 1));
-    StoreInst *StoreCount = IRBF.CreateStore(NewCount, Slot);
-    StoreCount->setMetadata(M.getMDKindID("nosanitize"), MDNode::get(C, None));
-  
-    // use monotonic operation to enable threadsafe
-    // #if LLVM_VERSION_MAJOR >= 11
-    //     IRBF.CreateAtomicRMW(AtomicRMWInst::Add, Slot,
-    //                         ConstantInt::get(Int32Ty, 1),
-    //                         MaybeAlign(4),
-    //                         AtomicOrdering::Monotonic);
-    // #else
-    //     IRBF.CreateAtomicRMW(AtomicRMWInst::Add, Slot,
-    //                         ConstantInt::get(Int32Ty, 1),
-    //                         AtomicOrdering::Monotonic);
-    // #endif
-  }
-  // end of funafl code
-  */
 
   for (auto &F : M) {
 
@@ -964,6 +932,7 @@ bool AFLCoverage::runOnModule(Module &M) {
 
       /* funafl code */
       if (fun_inst_cnt == 0) {
+        /* ADD Func Hit Instrumentation */
         BasicBlock::iterator IPF = BB.getFirstInsertionPt();
         IRBuilder<> IRBF(&(*IPF));
         if (debug)
@@ -971,12 +940,9 @@ bool AFLCoverage::runOnModule(Module &M) {
     
         LoadInst *AFLFuncHitPtrInst = IRBF.CreateLoad(PointerType::get(Int32Ty, 0), AFLFuncHitPtr);
         AFLFuncHitPtrInst->setMetadata(M.getMDKindID("nosanitize"), MDNode::get(C, None));
-    
-        uint64_t fn_hash = F.getGUID() % FUNC_HIT_SHM_SIZE;
-        if (debug)
-          fprintf(stderr, "Function %s -> hash = %lu\n", F.getName().str().c_str(), fn_hash);
-    
-        ConstantInt *Index = ConstantInt::get(Int32Ty, fn_hash);
+
+        // uint64_t fn_hash = F.getGUID() % FUNC_HIT_SHM_SIZE; // [error] should use cur_loc as hash
+        ConstantInt *Index = ConstantInt::get(Int32Ty, cur_loc % FUNC_HIT_SHM_SIZE);
     
         Value *Slot = IRBF.CreateGEP(Int32Ty, AFLFuncHitPtrInst, Index);
         
@@ -993,6 +959,49 @@ bool AFLCoverage::runOnModule(Module &M) {
         // Store result
         StoreInst *StoreCount = IRBF.CreateStore(FinalCount, Slot);
         StoreCount->setMetadata(M.getMDKindID("nosanitize"), MDNode::get(C, None));
+
+        /* ADD LOC2CURLOC MAPPING INSTRUMENTATION HERE */
+        // Load loc2curloc shared memory pointer
+        LoadInst *Loc2CurlocPtr = IRBF.CreateLoad(
+#if LLVM_VERSION_MAJOR >= 14
+          PointerType::get(Int32Ty, 0),
+#endif
+          AFLLoc2CurlocPtr);
+        Loc2CurlocPtr->setMetadata(M.getMDKindID("nosanitize"), MDNode::get(C, None));
+
+        // Calculate the same index used for the coverage map: prev_loc ^ cur_loc
+        Value *Loc2CurLocIdx;
+#ifdef AFL_HAVE_VECTOR_INTRINSICS
+        if (ngram_size) {
+          Loc2CurLocIdx = IRBF.CreateGEP(
+              Int32Ty, Loc2CurlocPtr,
+              IRBF.CreateZExt(
+                  IRBF.CreateXor(PrevLocTrans, IRBF.CreateZExt(CurLoc, Int32Ty)),
+                  Int32Ty));
+        } else
+#endif
+          Loc2CurLocIdx = IRBF.CreateGEP(
+#if LLVM_VERSION_MAJOR >= 14
+            Int32Ty,
+#endif
+            Loc2CurlocPtr, IRBF.CreateXor(PrevLocTrans, CurLoc));
+
+        // Store cur_loc into loc2curloc[prev_loc ^ cur_loc] = cur_loc
+        Value *CurLocToStore;
+#ifdef AFL_HAVE_VECTOR_INTRINSICS
+        if (ngram_size)
+          CurLocToStore = IRBF.CreateZExt(CurLoc, Int32Ty);
+        else
+#endif
+          CurLocToStore = CurLoc;
+
+        StoreInst *StoreLoc2CurLoc = IRBF.CreateStore(CurLocToStore, Loc2CurLocIdx);
+        StoreLoc2CurLoc->setMetadata(M.getMDKindID("nosanitize"), MDNode::get(C, None));
+
+        if (debug) {
+          fprintf(stderr, "Added loc2curloc mapping: loc2curloc[%s ^ %s] = %s\n", 
+                  "prev_loc", "cur_loc", "cur_loc");
+        }
 
         fun_inst_cnt++;
       }
