@@ -590,9 +590,10 @@
 #define TRACE1 1
 #define TRACE2 1
 #define WL_SUBGRAPH 1
-#define TRACE_KEEP 10.0
-#define TRACE_START1 1.2
-#define TRACE_START2 2
+// note: didn't make sense to change keep ratio yet [25-9]
+// #define TRACE_KEEP 10.0
+// #define TRACE_START1 1.2
+// #define TRACE_START2 2
 #define ENERGY_START_TIME 5
 #define NOT_HIT 100
 #define METHOD_CHANGE_TIMES 5

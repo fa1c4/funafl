@@ -336,7 +336,8 @@ void funafl_update_bitmap_score(afl_state_t *afl, struct queue_entry* q) {
     }
 
     d64 seed_score = q->seed_score;
-    u32 q_hit = afl->global_function_trace[q->function_trace_hash];
+    // comment [25-9]
+    // u32 q_hit = afl->global_function_trace[q->function_trace_hash];
 
     /* For every byte set in afl->fsrv.trace_bits[], see if there is a previous
        winner, and how it compares to us. */
@@ -345,24 +346,19 @@ void funafl_update_bitmap_score(afl_state_t *afl, struct queue_entry* q) {
       if (afl->fsrv.trace_bits[i]) {
   
         if (afl->top_rated[i]) {
+            // note: didn't make sense to change keep ratio yet [25-9]
+            // u32 top_rated_hit = afl->global_function_trace[afl->top_rated[i]->function_trace_hash];
+            // bool trace_start1 = (afl->global_function_trace_sum > (afl->global_function_trace_count * TRACE_START1));
+            // bool trace_start2 = (afl->max_function_trace > (afl->average_function_trace * TRACE_START2));
 
-            u32 top_rated_hit = afl->global_function_trace[afl->top_rated[i]->function_trace_hash];
-            bool trace_start1 = (afl->global_function_trace_sum > (afl->global_function_trace_count * TRACE_START1)); 
-            // bool trace_start2 = ((afl->max_function_trace / afl->average_function_trace) > TRACE_START2);
-            bool trace_start2 = (afl->max_function_trace > (afl->average_function_trace * TRACE_START2));
-
-            if (TRACE1 && trace_start1 && trace_start2) {
-                if (q_hit > top_rated_hit) {
-                    if (double_is_equal(top_rated_hit, 0.0)) {
-                        fprintf(stderr, "<afl-fuzz-fun> Error: top_rated_hit is 0");
-                        exit(-11);
-                    }
-                    d64 keep_ratio = (d64)(q_hit - top_rated_hit) / (d64)(top_rated_hit);
+            // if (TRACE1 && trace_start1 && trace_start2) {
+            //     if (!double_is_equal(top_rated_hit, 0.0) && q_hit > top_rated_hit) {
+            //         d64 keep_ratio = (d64)(q_hit - top_rated_hit) / (d64)(top_rated_hit);
                     
-                    if (keep_ratio > TRACE_KEEP) 
-                        continue;
-                }
-            }
+            //         if (keep_ratio > TRACE_KEEP) 
+            //             continue;
+            //     }
+            // }
 
             if (double_is_equal(seed_score, 0.0) || double_is_equal(afl->top_rated[i]->seed_score, 0.0) || !SEED) {
                 if (fav_factor > afl->top_rated[i]->exec_us * afl->top_rated[i]->len)
@@ -2059,15 +2055,14 @@ u32 funafl_calculate_score(afl_state_t *afl, struct queue_entry *q) {
   /* funafl code */
   if (afl->dynamic_enabled) { 
     // only enable the dynamic update when coverage increase rate is low
-    bool trace_start1 = true, trace_start2 = true;
     d64 times_hit = (d64)afl->global_function_trace[q->function_trace_hash];
-    d64 cur_score = afl->queue_cur->energy_score;
-    
     if (double_is_equal(times_hit, 0.0)) {
       times_hit = 1.0;
     }
+
+    d64 cur_score = afl->queue_cur->energy_score;
     
-    if (TRACE2 && trace_start1 && trace_start2) {
+    if (TRACE2) {
     
       if (times_hit < afl->average_function_trace) {
 
@@ -2084,23 +2079,20 @@ u32 funafl_calculate_score(afl_state_t *afl, struct queue_entry *q) {
     if (ENERGY && afl->energy_times > ENERGY_START_TIME) {
       
       if (double_is_equal(afl->max_score, 0.0) && double_is_equal(afl->min_score, FLT_MAX)) {
-
           ACTF("NO SCORE");
           exit(-2);
-
-      } else if (double_is_equal(cur_score, 0.0)) {
-
+      }
+      
+      if (double_is_equal(cur_score, 0.0)) {
           ACTF("NO CUR SCORE");
           exit(-3);
-
-      } else {
-          // normalizing the score
-          if (double_is_equal(afl->average_score_energy, 0.0)) {
-              afl->average_score_energy = 1.0;
-          } 
-          perf_score *= cur_score / afl->average_score_energy;
-
       }
+      
+      // normalizing the score
+      if (double_is_equal(afl->average_score_energy, 0.0)) {
+          afl->average_score_energy = 1.0;
+      } 
+      perf_score *= cur_score / afl->average_score_energy;
 
     }
 
