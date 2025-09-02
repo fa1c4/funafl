@@ -423,7 +423,7 @@
 #define SHM_ENV_VAR "__AFL_SHM_ID"
 
 #define FUNC_HIT_SHM_ENV_VAR "__AFL_FUNC_HIT_SHM_ID" /* funafl function hit share memory environment variable */
-#define LOC2CURLOC_SHM_ENV_VAR "__AFL_LOC2CURLOC_SHM_ID" /* AFL dynamic loc mapping to curloc share memory environment variable */
+// #define LOC2CURLOC_SHM_ENV_VAR "__AFL_LOC2CURLOC_SHM_ID" /* AFL dynamic loc mapping to curloc share memory environment variable */
 
 /* Environment variable used to pass SHM FUZZ ID to the called program. */
 
@@ -492,9 +492,7 @@
 #endif
 
 /* funafl code: extend shm size */
-// #define EXTEND_SHM_SIZE (1U << (MAP_SIZE_POW2 + 1))
-// #define FUNC_HIT_SHM_SIZE (MAP_SIZE * 4) // 65536 * 4 for bigger range
-#define FUNC_HIT_SHM_SIZE MAP_SIZE // 65536 for unsigned int type
+#define FUNC_HIT_SHM_SIZE 65536 // 65,536 for unsigned int type
 
 /* funafl code: coverage monitor constants*/
 #define COV_THREASHOLD 10 // coverage increase rate lower than 10 edges per hour

@@ -108,9 +108,9 @@ static u8 *__afl_area_ptr_backup = __afl_area_initial;
 u32 __afl_func_hit_initial[FUNC_HIT_SHM_SIZE]; /* funafl: init array for func_hit */
 static u32 *__afl_func_hit_ptr_dummy = __afl_func_hit_initial; /* funafl: dummy func_hit */
 static u32 *__afl_func_hit_ptr_backup = __afl_func_hit_initial; /* funafl: backup func_hit */
-u32 __afl_loc2curloc_initial[FUNC_HIT_SHM_SIZE]; /* funafl: init array for loc2curloc map */
-static u32 *__afl_loc2curloc_ptr_dummy = __afl_loc2curloc_initial; /* funafl: dummy loc2curloc map */
-static u32 *__afl_loc2curloc_ptr_backup = __afl_loc2curloc_initial; /* funafl: backup loc2curloc map */
+// u32 __afl_loc2curloc_initial[FUNC_HIT_SHM_SIZE]; /* funafl: init array for loc2curloc map */
+// static u32 *__afl_loc2curloc_ptr_dummy = __afl_loc2curloc_initial; /* funafl: dummy loc2curloc map */
+// static u32 *__afl_loc2curloc_ptr_backup = __afl_loc2curloc_initial; /* funafl: backup loc2curloc map */
 
 u8        *__afl_area_ptr = __afl_area_initial;
 u8        *__afl_dictionary;
@@ -120,7 +120,7 @@ u32       *__afl_fuzz_len = &__afl_fuzz_len_dummy;
 int        __afl_sharedmem_fuzzing __attribute__((weak));
 /* funafl: set visibility */
 u32 *__afl_func_hit_ptr __attribute__((used, visibility("default"))) = __afl_func_hit_initial; 
-u32 *__afl_loc2curloc_ptr __attribute__((used, visibility("default"))) = __afl_loc2curloc_initial;
+// u32 *__afl_loc2curloc_ptr __attribute__((used, visibility("default"))) = __afl_loc2curloc_initial;
 
 u32 __afl_final_loc;
 u32 __afl_map_size = MAP_SIZE;
@@ -228,7 +228,7 @@ u32 __afl_already_initialized_second;
 u32 __afl_already_initialized_early;
 u32 __afl_already_initialized_init;
 u32 __afl_already_initialized_funchit; /* funafl: flag to mark func_hit init already */
-u32 __afl_already_initialized_loc2curloc; /* funafl: flag to mark loc2curloc init already */
+// u32 __afl_already_initialized_loc2curloc; /* funafl: flag to mark loc2curloc init already */
 
 /* Dummy pipe for area_is_valid() */
 
@@ -772,12 +772,12 @@ static void __afl_map_shm(void) {
   if (__afl_already_initialized_funchit) return;
   __afl_already_initialized_funchit = 1;
 
-  if (__afl_already_initialized_loc2curloc) return;
-  __afl_already_initialized_loc2curloc = 1;
+  // if (__afl_already_initialized_loc2curloc) return;
+  // __afl_already_initialized_loc2curloc = 1;
 
   // assign dummy ptr to func_hit_ptr when is nullptr
   if (!__afl_func_hit_ptr) { __afl_func_hit_ptr = __afl_func_hit_ptr_dummy; }
-  if (!__afl_loc2curloc_ptr) { __afl_loc2curloc_ptr = __afl_loc2curloc_ptr_dummy; }
+  // if (!__afl_loc2curloc_ptr) { __afl_loc2curloc_ptr = __afl_loc2curloc_ptr_dummy; }
 
   // get FUNC_HIT_SHM from environment variable
   char *func_hit_id_str = getenv(FUNC_HIT_SHM_ENV_VAR);
@@ -806,30 +806,30 @@ static void __afl_map_shm(void) {
   __afl_func_hit_ptr_backup = __afl_func_hit_ptr;
 
   // get LOC2CURLOC_SHM from environment variable
-  char *loc2curloc_id_str = getenv(LOC2CURLOC_SHM_ENV_VAR);
+  // char *loc2curloc_id_str = getenv(LOC2CURLOC_SHM_ENV_VAR);
 
-  if (loc2curloc_id_str) {
+  // if (loc2curloc_id_str) {
 
-    u32 loc2curloc_id = atoi(loc2curloc_id_str);
+  //   u32 loc2curloc_id = atoi(loc2curloc_id_str);
 
-    __afl_loc2curloc_ptr = (u32 *)shmat(loc2curloc_id, NULL, 0);
+  //   __afl_loc2curloc_ptr = (u32 *)shmat(loc2curloc_id, NULL, 0);
 
-    if (!__afl_loc2curloc_ptr || __afl_loc2curloc_ptr == (void *)-1) {
-      perror("shmat for loc2curloc_ptr");
-      __afl_loc2curloc_ptr = __afl_loc2curloc_ptr_dummy;
-      exit(17);
-    }
+  //   if (!__afl_loc2curloc_ptr || __afl_loc2curloc_ptr == (void *)-1) {
+  //     perror("shmat for loc2curloc_ptr");
+  //     __afl_loc2curloc_ptr = __afl_loc2curloc_ptr_dummy;
+  //     exit(17);
+  //   }
 
-    if (__afl_debug) {
+  //   if (__afl_debug) {
 
-      fprintf(stderr, "DEBUG: Received %p via shmat for loc2curloc_ptr\n",
-          __afl_loc2curloc_ptr);
+  //     fprintf(stderr, "DEBUG: Received %p via shmat for loc2curloc_ptr\n",
+  //         __afl_loc2curloc_ptr);
 
-    }
+  //   }
 
-  }
+  // }
 
-  __afl_loc2curloc_ptr_backup = __afl_loc2curloc_ptr;
+  // __afl_loc2curloc_ptr_backup = __afl_loc2curloc_ptr;
 
   if (__afl_debug) {
 
@@ -932,26 +932,26 @@ static void __afl_unmap_shm(void) {
   __afl_already_initialized_funchit = 0;
 
   // deinit loc2curloc
-  if (!__afl_already_initialized_loc2curloc) return; // not mmaped
+  // if (!__afl_already_initialized_loc2curloc) return; // not mmaped
 
-  if (__afl_loc2curloc_ptr &&
-      __afl_loc2curloc_ptr != __afl_loc2curloc_ptr_dummy &&
-      __afl_loc2curloc_ptr != __afl_loc2curloc_initial) {
+  // if (__afl_loc2curloc_ptr &&
+  //     __afl_loc2curloc_ptr != __afl_loc2curloc_ptr_dummy &&
+  //     __afl_loc2curloc_ptr != __afl_loc2curloc_initial) {
 
-    if (shmdt((void *)__afl_loc2curloc_ptr) == -1) {
-      perror("shmdt for __afl_loc2curloc_ptr");
-    }
+  //   if (shmdt((void *)__afl_loc2curloc_ptr) == -1) {
+  //     perror("shmdt for __afl_loc2curloc_ptr");
+  //   }
 
-    if (__afl_debug) {
-      fprintf(stderr, "DEBUG: Unmapped __afl_loc2curloc_ptr at %p\n, dummy at %p\n", 
-          __afl_loc2curloc_ptr, __afl_loc2curloc_ptr_dummy);
-    }
+  //   if (__afl_debug) {
+  //     fprintf(stderr, "DEBUG: Unmapped __afl_loc2curloc_ptr at %p\n, dummy at %p\n", 
+  //         __afl_loc2curloc_ptr, __afl_loc2curloc_ptr_dummy);
+  //   }
 
-    __afl_loc2curloc_ptr = __afl_loc2curloc_ptr_dummy;
-    __afl_loc2curloc_ptr_backup = __afl_loc2curloc_ptr_dummy;
-  }
+  //   __afl_loc2curloc_ptr = __afl_loc2curloc_ptr_dummy;
+  //   __afl_loc2curloc_ptr_backup = __afl_loc2curloc_ptr_dummy;
+  // }
 
-  __afl_already_initialized_loc2curloc = 0;
+  // __afl_already_initialized_loc2curloc = 0;
   /* end of funafl */
 
 }

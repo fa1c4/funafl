@@ -2662,7 +2662,7 @@ int main(int argc, char **argv_orig, char **envp) {
 
   setup_func_hit_shmem(afl); /* funafl: setup the shm for func_hit_map */
 
-  setup_loc2curloc_shmem(afl); /* funafl: setup the shm for loc2curloc map */
+  // setup_loc2curloc_shmem(afl); /* funafl: setup the shm for loc2curloc map */
 
   afl->start_time = get_cur_time();
 
@@ -3825,10 +3825,10 @@ stop_fuzzing:
     ck_free(afl->shm_func_hit);
   }
 
-  if (afl->shm_loc2curloc) {
-    afl_shm_deinit(afl->shm_loc2curloc);
-    ck_free(afl->shm_loc2curloc);
-  }
+  // if (afl->shm_loc2curloc) {
+  //   afl_shm_deinit(afl->shm_loc2curloc);
+  //   ck_free(afl->shm_loc2curloc);
+  // }
 
   // free coverage monitor
   cleanup_coverage_monitor();

@@ -436,17 +436,17 @@ bool AFLCoverage::runOnModule(Module &M) {
       exit(20);
   }
 
-  static GlobalVariable *AFLLoc2CurlocPtr = NULL;
-  AFLLoc2CurlocPtr = new GlobalVariable(
-    M, PointerType::get(Int32Ty, 0), false,
-    GlobalValue::ExternalLinkage, 0, "__afl_loc2curloc_ptr");
+  // static GlobalVariable *AFLLoc2CurlocPtr = NULL;
+  // AFLLoc2CurlocPtr = new GlobalVariable(
+  //   M, PointerType::get(Int32Ty, 0), false,
+  //   GlobalValue::ExternalLinkage, 0, "__afl_loc2curloc_ptr");
 
-  if (AFLLoc2CurlocPtr) {
-      fprintf(stderr, "AFLLoc2CurlocPtr successfully created at address: %p\n", AFLLoc2CurlocPtr);
-  } else {
-      fprintf(stderr, "Failed to create AFLLoc2CurlocPtr\n");
-      exit(20);
-  }
+  // if (AFLLoc2CurlocPtr) {
+  //     fprintf(stderr, "AFLLoc2CurlocPtr successfully created at address: %p\n", AFLLoc2CurlocPtr);
+  // } else {
+  //     fprintf(stderr, "Failed to create AFLLoc2CurlocPtr\n");
+  //     exit(20);
+  // }
   /* end of funafl code */
   
   GlobalVariable *AFLPrevLoc;
@@ -960,48 +960,27 @@ bool AFLCoverage::runOnModule(Module &M) {
         StoreInst *StoreCount = IRBF.CreateStore(FinalCount, Slot);
         StoreCount->setMetadata(M.getMDKindID("nosanitize"), MDNode::get(C, None));
 
-        /* ADD LOC2CURLOC MAPPING INSTRUMENTATION HERE */
+        /* Path 2: mapping loc to cur_loc (not necessary when control func_hit loc using cur_loc) */
+        /*
         // Load loc2curloc shared memory pointer
-        LoadInst *Loc2CurlocPtr = IRBF.CreateLoad(
-#if LLVM_VERSION_MAJOR >= 14
-          PointerType::get(Int32Ty, 0),
-#endif
-          AFLLoc2CurlocPtr);
+        LoadInst *Loc2CurlocPtr = IRBF.CreateLoad(PointerType::get(Int32Ty, 0), AFLLoc2CurlocPtr);
         Loc2CurlocPtr->setMetadata(M.getMDKindID("nosanitize"), MDNode::get(C, None));
 
-        // Calculate the same index used for the coverage map: prev_loc ^ cur_loc
-        Value *Loc2CurLocIdx;
-#ifdef AFL_HAVE_VECTOR_INTRINSICS
-        if (ngram_size) {
-          Loc2CurLocIdx = IRBF.CreateGEP(
-              Int32Ty, Loc2CurlocPtr,
-              IRBF.CreateZExt(
-                  IRBF.CreateXor(PrevLocTrans, IRBF.CreateZExt(CurLoc, Int32Ty)),
-                  Int32Ty));
-        } else
-#endif
-          Loc2CurLocIdx = IRBF.CreateGEP(
-#if LLVM_VERSION_MAJOR >= 14
-            Int32Ty,
-#endif
-            Loc2CurlocPtr, IRBF.CreateXor(PrevLocTrans, CurLoc));
+        // Calculate the bounded index: (prev_loc ^ cur_loc) % FUNC_HIT_SHM_SIZE
+        Value *RawIdx = IRBF.CreateXor(PrevLocTrans, CurLoc);
+        Value *BoundedIdx = IRBF.CreateURem(RawIdx, ConstantInt::get(Int32Ty, FUNC_HIT_SHM_SIZE));
+        
+        Value *Loc2CurLocIdx = IRBF.CreateGEP(Int32Ty, Loc2CurlocPtr, BoundedIdx);
 
         // Store cur_loc into loc2curloc[prev_loc ^ cur_loc] = cur_loc
-        Value *CurLocToStore;
-#ifdef AFL_HAVE_VECTOR_INTRINSICS
-        if (ngram_size)
-          CurLocToStore = IRBF.CreateZExt(CurLoc, Int32Ty);
-        else
-#endif
-          CurLocToStore = CurLoc;
-
-        StoreInst *StoreLoc2CurLoc = IRBF.CreateStore(CurLocToStore, Loc2CurLocIdx);
+        StoreInst *StoreLoc2CurLoc = IRBF.CreateStore(CurLoc, Loc2CurLocIdx);
         StoreLoc2CurLoc->setMetadata(M.getMDKindID("nosanitize"), MDNode::get(C, None));
-
+        
         if (debug) {
           fprintf(stderr, "Added loc2curloc mapping: loc2curloc[%s ^ %s] = %s\n", 
-                  "prev_loc", "cur_loc", "cur_loc");
+          "prev_loc", "cur_loc", "cur_loc");
         }
+        */
 
         fun_inst_cnt++;
       }

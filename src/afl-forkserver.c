@@ -279,11 +279,11 @@ void afl_fsrv_init(afl_forkserver_t *fsrv) {
   }
 
   // Initialize loc2curloc_map for dynamic loc index mapping to curloc of basic blocks
-  fsrv->loc2curloc_map = (u32*)calloc(1, MAP_SIZE * sizeof(u32));
-  if (fsrv->loc2curloc_map == NULL) {
-    perror("Memory allocation failed using calloc for loc2curloc_map");
-    exit(16);
-  }
+  // fsrv->loc2curloc_map = (u32*)calloc(1, MAP_SIZE * sizeof(u32));
+  // if (fsrv->loc2curloc_map == NULL) {
+  //   perror("Memory allocation failed using calloc for loc2curloc_map");
+  //   exit(16);
+  // }
 
   /* end of funafl code */
 

@@ -54,6 +54,6 @@ u32 funafl_calculate_score(afl_state_t *afl, struct queue_entry *q);
 
 void setup_func_hit_shmem(afl_state_t *afl);
 
-void setup_loc2curloc_shmem(afl_state_t *afl);
+// void setup_loc2curloc_shmem(afl_state_t *afl);
 
 #endif // _AFL_FUZZ_FUN_H

@@ -143,7 +143,7 @@ struct score_union* funafl_get_score_for_function_trace(struct afl_state* afl) {
     // get score for each function hit by current testcase and its bbs
     for (u32 i = 0; i < FUNC_COUNT; ++i) {
         if (testcase_hit_locs[i] == 0) break;
-        u32 cur_loc = afl->fsrv.loc2curloc_map[testcase_hit_locs[i]];
+        u32 cur_loc = testcase_hit_locs[i];
 
         struct loc2bbs* tmp_loc2bbs = NULL;
         HASH_FIND_INT(afl->record_loc2bbs, &cur_loc, tmp_loc2bbs);
@@ -585,7 +585,7 @@ fsrv_run_result_t __attribute__((hot)) funafl_fsrv_run_target(
         /* funafl code */
         memset(fsrv->func_hit_map, 0, FUNC_COUNT * sizeof(u32));
         
-        memset(fsrv->loc2curloc_map, 0, MAP_SIZE * sizeof(u32));
+        // memset(fsrv->loc2curloc_map, 0, MAP_SIZE * sizeof(u32));
         /* end of funafl code */
 
         MEM_BARRIER();
@@ -598,7 +598,7 @@ fsrv_run_result_t __attribute__((hot)) funafl_fsrv_run_target(
     /* funafl code */
     memset(fsrv->func_hit_map, 0, FUNC_COUNT * sizeof(u32));
 
-    memset(fsrv->loc2curloc_map, 0, MAP_SIZE * sizeof(u32));
+    // memset(fsrv->loc2curloc_map, 0, MAP_SIZE * sizeof(u32));
     /* end of funafl code */
     
     MEM_BARRIER();

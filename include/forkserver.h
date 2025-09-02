@@ -228,8 +228,8 @@ typedef struct afl_forkserver {
   u32  *func_hit_map; /* funafl: pointer to func_hit_map */
   u32  *last_func_hit_map; /* funafl: previous test case func_hit_map for diff */
 
-  u32 *loc2curloc_map_len; /* funafl: pointer to total counter of loc2curloc_map */
-  u32 *loc2curloc_map; /* funafl: pointer to loc2curloc_map */
+  // u32 *loc2curloc_map_len; /* funafl: pointer to total counter of loc2curloc_map */
+  // u32 *loc2curloc_map; /* funafl: pointer to loc2curloc_map */
 
 } afl_forkserver_t;
 
