@@ -20,7 +20,7 @@ export AFL_PYTHON_MODULE=custom_mutators.dyn_update.aicfg_flow
 # ../afl-fuzz -m none -i /home/fa1c4/Desktop/aflpp_benchmarks/zlib/seeds -o /home/fa1c4/Desktop/aflpp_benchmarks/zlib/out -- /home/fa1c4/Desktop/aflpp_benchmarks/zlib/zlib_uncompress_fuzzer 2>&1 | tee funlog
 
 # target: lcms
-export FUN_AICFG_DIR=/home/fa1c4/Desktop/aflpp_benchmarks/lcms/aicfg
+export FUN_AICFG_DIR=/home/fa1c4/Desktop/funafl-bench/lcms/aicfg
 export TARGET_NAME=cms_transform_fuzzer
 
-../afl-fuzz -m none -i /home/fa1c4/Desktop/aflpp_benchmarks/lcms/seeds -o /home/fa1c4/Desktop/aflpp_benchmarks/lcms/out -- /home/fa1c4/Desktop/aflpp_benchmarks/lcms/cms_transform_fuzzer
+../afl-fuzz -m none -i /home/fa1c4/Desktop/funafl-bench/lcms/seeds -o /home/fa1c4/Desktop/funafl-bench/lcms/out -- /home/fa1c4/Desktop/funafl-bench/lcms/cms_transform_fuzzer

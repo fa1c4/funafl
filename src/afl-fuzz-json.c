@@ -188,12 +188,6 @@ double get_score_for_array(double attributes[]) {
         res += attributes[i] * attributes[i];
     }
     
-    // check res > 0.0
-    if (res <= 0.0) {
-        fprintf(stderr, "<afl-fuzz-json> Error: Invalid score: %f\n", res);
-        exit(-10);
-    }
-
     return sqrt(res);
 }
 
