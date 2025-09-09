@@ -1952,12 +1952,14 @@ fsrv_run_result_t __attribute__((hot)) afl_fsrv_run_target(
     if (likely(!fsrv->nyx_mode)) {
 
       memset(fsrv->trace_bits, 0, fsrv->map_size);
+      memset(fsrv->func_hit_map, 0, FUNC_COUNT * sizeof(u32)); // funafl 
       MEM_BARRIER();
 
     }
 
 #else
     memset(fsrv->trace_bits, 0, fsrv->map_size);
+    memset(fsrv->func_hit_map, 0, FUNC_COUNT * sizeof(u32)); // funafl
     MEM_BARRIER();
 #endif
 

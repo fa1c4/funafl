@@ -44,9 +44,7 @@ fsrv_run_result_t __attribute__((hot)) funafl_fsrv_run_target(afl_forkserver_t *
 
 fsrv_run_result_t __attribute__((hot)) funafl_fuzz_run_target(afl_state_t *afl, afl_forkserver_t *fsrv, u32 timeout);
 
-// u8 funafl_calibrate_case(afl_state_t *afl, struct queue_entry *q, u8 *use_mem, u32 handicap, u8 from_queue);
-u8 funafl_calibrate_case(afl_state_t *afl, struct queue_entry *q, u8 *use_mem, 
-    u32 handicap, u8 from_queue);
+u8 funafl_calibrate_case(afl_state_t *afl, struct queue_entry *q, u8 *use_mem, u32 handicap, u8 from_queue);
 
 u8 __attribute__((hot)) funafl_save_if_interesting(afl_state_t *afl, void *mem, u32 len, u8 fault);
 

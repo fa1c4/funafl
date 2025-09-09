@@ -49,6 +49,9 @@ fsrv_run_result_t __attribute__((hot)) fuzz_run_target(afl_state_t      *afl,
                                                        afl_forkserver_t *fsrv,
                                                        u32 timeout) {
 
+  // funafl: store mutatation time
+  u64 mut_start_us, mut_stop_us;
+
 #ifdef PROFILING
   static u64      time_spent_start = 0;
   struct timespec spec;
@@ -88,7 +91,7 @@ fsrv_run_result_t __attribute__((hot)) fuzz_run_target(afl_state_t      *afl,
 
   /* If post_run() function is defined in custom mutator, the function will be
      called each time after AFL++ executes the target program. */
-
+  mut_start_us = get_cur_time_us(); // funafl
   if (unlikely(afl->custom_mutators_count)) {
 
     LIST_FOREACH(&afl->custom_mutator_list, struct custom_mutator, {
@@ -102,6 +105,8 @@ fsrv_run_result_t __attribute__((hot)) fuzz_run_target(afl_state_t      *afl,
     });
 
   }
+  mut_stop_us = get_cur_time_us();
+  afl->mut_time += mut_stop_us - mut_start_us; // funafl
 
 #ifdef PROFILING
   clock_gettime(CLOCK_REALTIME, &spec);
@@ -873,15 +878,15 @@ void sync_fuzzers(afl_state_t *afl) {
 
         u32 new_len = write_to_testcase(afl, (void **)&mem, st.st_size, 1);
 
-        // fault = fuzz_run_target(afl, &afl->fsrv, afl->fsrv.exec_tmout);
-        fault = funafl_fuzz_run_target(afl, &afl->fsrv, afl->fsrv.exec_tmout); // funafl code
+        fault = fuzz_run_target(afl, &afl->fsrv, afl->fsrv.exec_tmout);
+        // fault = funafl_fuzz_run_target(afl, &afl->fsrv, afl->fsrv.exec_tmout); // funafl
 
         if (afl->stop_soon) { goto close_sync; }
 
         afl->syncing_party = sd_ent->d_name;
         
         // afl->queued_imported += save_if_interesting(afl, mem, new_len, fault);
-        afl->queued_imported += funafl_save_if_interesting(afl, mem, new_len, fault); // funafl code
+        afl->queued_imported += funafl_save_if_interesting(afl, mem, new_len, fault); // funafl
 
         show_stats(afl);
         afl->syncing_party = 0;
@@ -1200,8 +1205,8 @@ u8 __attribute__((hot)) common_fuzz_stuff(afl_state_t *afl, u8 *out_buf,
 
   }
 
-  // fault = fuzz_run_target(afl, &afl->fsrv, afl->fsrv.exec_tmout);
-  fault = funafl_fuzz_run_target(afl, &afl->fsrv, afl->fsrv.exec_tmout); // funafl code
+  fault = fuzz_run_target(afl, &afl->fsrv, afl->fsrv.exec_tmout);
+  // fault = funafl_fuzz_run_target(afl, &afl->fsrv, afl->fsrv.exec_tmout); // funafl
 
   if (afl->stop_soon) { return 1; }
 

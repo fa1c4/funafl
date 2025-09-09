@@ -231,8 +231,8 @@ inline u8 has_new_bits(afl_state_t *afl, u8 *virgin_map) {
   u8 ret = 0;
   while (i--) {
 
-    // if (unlikely(*current)) discover_word(&ret, current, virgin);
-    if (unlikely(*current)) funafl_discover_word(&ret, current, virgin); // funafl code
+    if (unlikely(*current)) discover_word(&ret, current, virgin);
+    // if (unlikely(*current)) funafl_discover_word(&ret, current, virgin); // funafl code
 
     current++;
     virgin++;
@@ -831,8 +831,7 @@ u8 __attribute__((hot)) save_if_interesting(afl_state_t *afl, void *mem,
 
     /* Try to calibrate inline; this also calls update_bitmap_score() when
        successful. */
-    // res = calibrate_case(afl, afl->queue_top, mem, afl->queue_cycle - 1, 0);
-    res = funafl_calibrate_case(afl, afl->queue_top, mem, afl->queue_cycle - 1, 0); // funafl code 
+    res = calibrate_case(afl, afl->queue_top, mem, afl->queue_cycle - 1, 0);
 
     if (unlikely(res == FSRV_RUN_ERROR)) {
 

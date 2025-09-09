@@ -290,11 +290,11 @@ void funafl_discover_word(u8 *ret, u64 *current, u64 *virgin) {
                 (cur[4] && vir[4] == 0xff) || (cur[5] && vir[5] == 0xff) ||
                 (cur[6] && vir[6] == 0xff) || (cur[7] && vir[7] == 0xff)) {
                     
-                    *ret = 2;
+              *ret = 2;
 
             }
             else
-                *ret = 1;
+              *ret = 1;
 
         }
 
@@ -980,7 +980,8 @@ u8 funafl_calibrate_case(afl_state_t *afl, struct queue_entry *q, u8 *use_mem,
 
     (void)write_to_testcase(afl, (void **)&use_mem, q->len, 1);
 
-    fault = funafl_fuzz_run_target(afl, &afl->fsrv, use_tmout);
+    fault = fuzz_run_target(afl, &afl->fsrv, use_tmout);
+    // fault = funafl_fuzz_run_target(afl, &afl->fsrv, use_tmout);
 
     /* afl->stop_soon is set by the handler for Ctrl+C. When it's pressed,
        we want to bail out quickly. */
@@ -1004,7 +1005,8 @@ u8 funafl_calibrate_case(afl_state_t *afl, struct queue_entry *q, u8 *use_mem,
   if (q->exec_cksum) {
 
     memcpy(afl->first_trace, afl->fsrv.trace_bits, afl->fsrv.map_size);
-    hnb = funafl_has_new_bits(afl, afl->virgin_bits);
+    hnb = has_new_bits(afl, afl->virgin_bits);
+    // hnb = funafl_has_new_bits(afl, afl->virgin_bits);
     if (hnb > new_bits) { new_bits = hnb; }
 
   }
@@ -1023,7 +1025,8 @@ u8 funafl_calibrate_case(afl_state_t *afl, struct queue_entry *q, u8 *use_mem,
 
     (void)write_to_testcase(afl, (void **)&use_mem, q->len, 1);
 
-    fault = funafl_fuzz_run_target(afl, &afl->fsrv, use_tmout);
+    fault = fuzz_run_target(afl, &afl->fsrv, use_tmout);
+    // fault = funafl_fuzz_run_target(afl, &afl->fsrv, use_tmout);
 
     // update the time spend in calibration after each execution, as those may
     // be slow
@@ -1050,23 +1053,9 @@ u8 funafl_calibrate_case(afl_state_t *afl, struct queue_entry *q, u8 *use_mem,
     cksum = hash64(afl->fsrv.trace_bits, afl->fsrv.map_size, HASH_CONST);
     if (q->exec_cksum != cksum) {
 
-      hnb = funafl_has_new_bits(afl, afl->virgin_bits);
+      hnb = has_new_bits(afl, afl->virgin_bits);
+      // hnb = funafl_has_new_bits(afl, afl->virgin_bits);
       if (hnb > new_bits) { new_bits = hnb; }
-
-      /* funafl code */
-      if (SEED || ENERGY) {
-          afl->method_change++;
-          struct score_union* sc = funafl_get_score_for_function_trace(afl);
-          
-          q->seed_score = sc->seed_score;
-          q->energy_score = sc->energy_score;
-          free(sc);
-      }
-
-      if (TRACE1 || TRACE2) {
-          q->function_trace_hash = funafl_get_function_trace_hash(afl);
-      }
-      
 
       if (q->exec_cksum) {
 
@@ -1123,7 +1112,6 @@ u8 funafl_calibrate_case(afl_state_t *afl, struct queue_entry *q, u8 *use_mem,
 
     stop_us = get_cur_time_us();
     diff_us = stop_us - start_us;
-    diff_us -= afl->mut_time; // funafl code: leave over mutatation time
     q->mut_time = afl->mut_time;
     afl->mut_time = 0; // reset after cutting off mutation time 
     if (unlikely(!diff_us)) { ++diff_us; }
@@ -1145,7 +1133,7 @@ u8 funafl_calibrate_case(afl_state_t *afl, struct queue_entry *q, u8 *use_mem,
 
   if (double_is_equal(afl->stage_max, 0.0)) {
     fprintf(stderr, "<afl-fuzz-fun> Error: afl->stage_max is 0.0!");
-    exit(-12);
+    exit(12);
   }
   q->exec_us = diff_us / afl->stage_max;
   if (unlikely(!q->exec_us)) { q->exec_us = 1; }
@@ -1157,7 +1145,8 @@ u8 funafl_calibrate_case(afl_state_t *afl, struct queue_entry *q, u8 *use_mem,
   afl->total_bitmap_size += q->bitmap_size;
   ++afl->total_bitmap_entries;
 
-  funafl_update_bitmap_score(afl, q);
+  update_bitmap_score(afl, q);
+  // funafl_update_bitmap_score(afl, q);
 
   /* If this case didn't result in new output from the instrumentation, tell
      parent. This is a non-critical problem, but something to warn the user
@@ -1289,7 +1278,8 @@ u8 __attribute__((hot)) funafl_save_if_interesting(afl_state_t *afl, void *mem, 
         unlikely(afl->san_abstraction == COVERAGE_INCREASE)) {
 
       /* Check if the input increase the coverage */
-      new_bits = funafl_has_new_bits_unclassified(afl, afl->virgin_bits);
+      new_bits = has_new_bits_unclassified(afl, afl->virgin_bits);
+      // new_bits = funafl_has_new_bits_unclassified(afl, afl->virgin_bits);
 
       if (unlikely(new_bits)) { feed_san = 1; }
 
@@ -1318,7 +1308,9 @@ u8 __attribute__((hot)) funafl_save_if_interesting(afl_state_t *afl, void *mem, 
       for (san_idx = 0; san_idx < afl->san_binary_length; san_idx++) {
 
         len = write_to_testcase(afl, &mem, len, 0);
-        san_fault = funafl_fuzz_run_target(afl, &afl->san_fsrvs[san_idx],
+        // san_fault = funafl_fuzz_run_target(afl, &afl->san_fsrvs[san_idx],
+        //                             afl->san_fsrvs[san_idx].exec_tmout);
+        san_fault = fuzz_run_target(afl, &afl->san_fsrvs[san_idx],
                                     afl->san_fsrvs[san_idx].exec_tmout);
 
         // DEBUGF("ASAN Result: %hhd\n", asan_fault);
@@ -1360,7 +1352,8 @@ u8 __attribute__((hot)) funafl_save_if_interesting(afl_state_t *afl, void *mem, 
 
       /* If we are in coverage increasing abstraction and have fed input to
          sanitizers, we are sure it has new bits.*/
-      new_bits = funafl_has_new_bits_unclassified(afl, afl->virgin_bits);
+      new_bits = has_new_bits_unclassified(afl, afl->virgin_bits);
+      // new_bits = funafl_has_new_bits_unclassified(afl, afl->virgin_bits);
 
     }
 
@@ -1425,26 +1418,6 @@ u8 __attribute__((hot)) funafl_save_if_interesting(afl_state_t *afl, void *mem, 
     }
 
     add_to_queue(afl, queue_fn, len, 0);
-
-    /* funafl code */
-    if (SEED || ENERGY) {
-
-        afl->method_change++;
-        struct score_union* sc = funafl_get_score_for_function_trace(afl);
-        
-        afl->queue_top->seed_score = sc->seed_score;
-        afl->queue_top->energy_score = sc->energy_score;
-
-        free(sc);
-
-    }
-
-    if (TRACE1 || TRACE2) {
-
-        afl->queue_top->function_trace_hash = funafl_get_function_trace_hash(afl);
-
-    }
-    /* end of funafl code */
 
     if (unlikely(afl->fuzz_mode) &&
         likely(afl->switch_fuzz_mode && !afl->non_instrumented_mode)) {
@@ -1512,13 +1485,19 @@ u8 __attribute__((hot)) funafl_save_if_interesting(afl_state_t *afl, void *mem, 
 
     }
 
+    afl->method_change++;
+    struct score_union* sc = funafl_get_score_for_function_trace(afl);
+    afl->queue_top->seed_score = sc->seed_score;
+    afl->queue_top->energy_score = sc->energy_score;
+    free(sc);
+
+    afl->queue_top->function_trace_hash = funafl_get_function_trace_hash(afl);
+
     /* Try to calibrate inline; this also calls update_bitmap_score() when
        successful. */
 
-    /* funafl code */
-    // res = calibrate_case(afl, afl->queue_top, mem, afl->queue_cycle - 1, 0);
-    res = funafl_calibrate_case(afl, afl->queue_top, mem, afl->queue_cycle - 1, 0);
-    /* end of funafl code */
+    res = calibrate_case(afl, afl->queue_top, mem, afl->queue_cycle - 1, 0);
+    // res = funafl_calibrate_case(afl, afl->queue_top, mem, afl->queue_cycle - 1, 0); // funafl
 
     if (unlikely(res == FSRV_RUN_ERROR)) {
 
@@ -1561,7 +1540,8 @@ may_save_fault:
 
         simplify_trace(afl, afl->fsrv.trace_bits);
 
-        if (!funafl_has_new_bits(afl, afl->virgin_tmout)) { return keeping; }
+        if (!has_new_bits(afl, afl->virgin_tmout)) { return keeping; }
+        // if (!funafl_has_new_bits(afl, afl->virgin_tmout)) { return keeping; }
 
       }
 
@@ -1614,7 +1594,8 @@ may_save_fault:
 
         }
 
-        new_fault = funafl_fuzz_run_target(afl, &afl->fsrv, afl->hang_tmout);
+        new_fault = fuzz_run_target(afl, &afl->fsrv, afl->hang_tmout);
+        // new_fault = funafl_fuzz_run_target(afl, &afl->fsrv, afl->hang_tmout);
         classify_counts(&afl->fsrv);
 
         /* A corner case that one user reported bumping into: increasing the
@@ -1701,7 +1682,8 @@ may_save_fault:
 
         simplify_trace(afl, afl->fsrv.trace_bits);
 
-        if (!funafl_has_new_bits(afl, afl->virgin_crash)) { return keeping; }
+        if (!has_new_bits(afl, afl->virgin_crash)) { return keeping; }
+        // if (!funafl_has_new_bits(afl, afl->virgin_crash)) { return keeping; }
 
       }
 
@@ -1833,7 +1815,6 @@ may_save_fault:
 }
 
 
-// static u32 funafl_calculate_score(afl_state_t *afl, struct queue_entry* q);
 u32 funafl_calculate_score(afl_state_t *afl, struct queue_entry *q) {
 
   u32 cal_cycles = afl->total_cal_cycles;
@@ -2119,8 +2100,6 @@ u32 funafl_calculate_score(afl_state_t *afl, struct queue_entry *q) {
     if (double_is_equal(times_hit, 0.0)) {
       times_hit = 1.0;
     }
-
-    d64 cur_score = afl->queue_cur->energy_score;
     
     if (TRACE2) {
     
@@ -2136,28 +2115,24 @@ u32 funafl_calculate_score(afl_state_t *afl, struct queue_entry *q) {
     
     }
 
-    if (ENERGY && afl->energy_times > ENERGY_START_TIME) {
-      
-      if (double_is_equal(afl->max_score, 0.0) && double_is_equal(afl->min_score, FLT_MAX)) {
-          ACTF("NO SCORE");
-          exit(-2);
-      }
-      
-      if (double_is_equal(cur_score, 0.0)) {
-          ACTF("NO CUR SCORE");
-          exit(-3);
-      }
-      
+    if (ENERGY) {
+      d64 cur_score = q->energy_score;
+
       // normalizing the score
       if (double_is_equal(afl->average_score_energy, 0.0)) {
           afl->average_score_energy = 1.0;
-      } 
-      perf_score *= cur_score / afl->average_score_energy;
-
+      }
+      
+      if (!double_is_equal(afl->max_score, 0.0) && !double_is_equal(afl->min_score, FLT_MAX)) {
+          if (double_is_equal(cur_score, 0.0)) {
+              ACTF("NO CUR SCORE");
+              cur_score = afl->average_score_energy;
+          }
+          
+          perf_score *= cur_score / afl->average_score_energy;
+      }
     }
 
-    if (afl->energy_times <= ENERGY_START_TIME) 
-      afl->energy_times++;
   }
   /* end of funafl code */
 

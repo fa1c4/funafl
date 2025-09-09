@@ -654,13 +654,13 @@ void read_foreign_testcases(afl_state_t *afl, int first) {
 
         u32 len = write_to_testcase(afl, (void **)&mem, st.st_size, 1);
         
-        // fault = fuzz_run_target(afl, &afl->fsrv, afl->fsrv.exec_tmout);
-        fault = funafl_fuzz_run_target(afl, &afl->fsrv, afl->fsrv.exec_tmout); // funafl code
+        fault = fuzz_run_target(afl, &afl->fsrv, afl->fsrv.exec_tmout);
+        // fault = funafl_fuzz_run_target(afl, &afl->fsrv, afl->fsrv.exec_tmout); // funafl
 
         afl->syncing_party = foreign_name;
         
         // afl->queued_imported += save_if_interesting(afl, mem, len, fault);
-        afl->queued_imported += funafl_save_if_interesting(afl, mem, len, fault); // funafl code
+        afl->queued_imported += funafl_save_if_interesting(afl, mem, len, fault); // funafl
 
         afl->syncing_party = 0;
         munmap(mem, st.st_size);
@@ -946,8 +946,8 @@ void perform_dry_run(afl_state_t *afl) {
 
     close(fd);
 
-    // res = calibrate_case(afl, q, use_mem, 0, 1);
-    res = funafl_calibrate_case(afl, q, use_mem, 0, 1); // funafl code
+    res = calibrate_case(afl, q, use_mem, 0, 1);
+    // res = funafl_calibrate_case(afl, q, use_mem, 0, 1); // funafl code
 
     /* For AFLFast schedules we update the queue entry */
     if (unlikely(afl->schedule >= FAST && afl->schedule <= RARE) &&
@@ -1181,8 +1181,8 @@ void perform_dry_run(afl_state_t *afl) {
 
             simplify_trace(afl, afl->fsrv.trace_bits);
 
-            // if (!has_new_bits(afl, afl->virgin_crash)) { break; }
-            if (!funafl_has_new_bits(afl, afl->virgin_crash)) { break; } // funafl code
+            if (!has_new_bits(afl, afl->virgin_crash)) { break; }
+            // if (!funafl_has_new_bits(afl, afl->virgin_crash)) { break; } // funafl code
 
           }
 

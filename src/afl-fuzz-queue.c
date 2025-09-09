@@ -27,6 +27,7 @@
 #include <ctype.h>
 #include <math.h>
 // funafl header
+#include "afl-fuzz-json.h"
 #include "afl-fuzz-fun.h"
 
 #ifdef _STANDALONE_MODULE

@@ -445,8 +445,8 @@ u8 fuzz_one_original(afl_state_t *afl) {
 
       afl->queue_cur->exec_cksum = 0;
 
-      // res = calibrate_case(afl, afl->queue_cur, in_buf, afl->queue_cycle - 1, 0);
-      res = funafl_calibrate_case(afl, afl->queue_cur, in_buf, afl->queue_cycle - 1, 0); // funafl code
+      res = calibrate_case(afl, afl->queue_cur, in_buf, afl->queue_cycle - 1, 0);
+      // res = funafl_calibrate_case(afl, afl->queue_cur, in_buf, afl->queue_cycle - 1, 0); // funafl code
 
       if (unlikely(res == FSRV_RUN_ERROR)) {
 
