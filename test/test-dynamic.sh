@@ -13,14 +13,18 @@ export PYTHONPATH=/home/fa1c4/Desktop/funafl
 export AFL_PYTHON_MODULE=custom_mutators.dyn_update.aicfg_flow
 
 # target: zlib
-# export FUN_AICFG_DIR=/home/fa1c4/Desktop/aflpp_benchmarks/zlib/aicfg
-# export TARGET_NAME=zlib_uncompress_fuzzer
+export TARGET_NAME=zlib_uncompress_fuzzer
 
+# export FUN_AICFG_DIR=/home/fa1c4/Desktop/aflpp_benchmarks/zlib/aicfg
 # ../afl-fuzz -m none -i /home/fa1c4/Desktop/aflpp_benchmarks/zlib/seeds -o /home/fa1c4/Desktop/aflpp_benchmarks/zlib/out -- /home/fa1c4/Desktop/aflpp_benchmarks/zlib/zlib_uncompress_fuzzer
 # ../afl-fuzz -m none -i /home/fa1c4/Desktop/aflpp_benchmarks/zlib/seeds -o /home/fa1c4/Desktop/aflpp_benchmarks/zlib/out -- /home/fa1c4/Desktop/aflpp_benchmarks/zlib/zlib_uncompress_fuzzer 2>&1 | tee funlog
+# cmplog test
+export FUN_AICFG_DIR=/home/fa1c4/Desktop/benchmarks_src/zlib/aicfg
+../afl-fuzz -m none -i ../../aflpp_benchmarks/zlib/seeds -o ../../aflpp_benchmarks/zlib/out -c /home/fa1c4/Desktop/benchmarks_src/zlib_cmplog/zlib_uncompress_fuzzer -- /home/fa1c4/Desktop/benchmarks_src/zlib/zlib_uncompress_fuzzer @@
+
 
 # target: lcms
-export FUN_AICFG_DIR=/home/fa1c4/Desktop/funafl-bench/lcms/aicfg
-export TARGET_NAME=cms_transform_fuzzer
+# export FUN_AICFG_DIR=/home/fa1c4/Desktop/funafl-bench/lcms/aicfg
+# export TARGET_NAME=cms_transform_fuzzer
 
-../afl-fuzz -m none -i /home/fa1c4/Desktop/funafl-bench/lcms/seeds -o /home/fa1c4/Desktop/funafl-bench/lcms/out -- /home/fa1c4/Desktop/funafl-bench/lcms/cms_transform_fuzzer
+# ../afl-fuzz -m none -i /home/fa1c4/Desktop/funafl-bench/lcms/seeds -o /home/fa1c4/Desktop/funafl-bench/lcms/out -- /home/fa1c4/Desktop/funafl-bench/lcms/cms_transform_fuzzer
