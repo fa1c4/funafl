@@ -1,22 +1,23 @@
-use crate::feature_sched::TpeHistoryMeta;
-use crate::feature_sched::{
-    get_active_dim, get_v_candidates, push_v_candidate, replace_v_candidates, vecn_eq,
-};
+use core::fmt::Write as _;
 use core::num::NonZeroUsize;
-use libafl::common::HasMetadata;
+use std::sync::RwLock;
+use std::time::Duration;
+
+use libafl::{common::HasMetadata, Error};
 use libafl_bolts::{
     current_time,
     rands::{Rand, StdRand},
 };
-use std::sync::RwLock;
-use std::time::{Duration, Instant};
 
-use libafl::observers::map::StdMapObserver;
-use libafl::observers::HitcountsMapObserver;
-use libafl::observers::MapObserver;
-use libafl_bolts::tuples::Handle;
+use crate::feature_sched::features_map::{normalize_simplex_eps, EPS};
+use crate::feature_sched::metadata::VecMaskRuntimeMeta;
+use crate::feature_sched::{
+    get_active_dim, get_v_candidates, push_v_candidate, replace_v_candidates, vecn_eq,
+    TpeHistoryMeta,
+};
 
-use core::fmt::Write as _;
+const MAX_TRIALS: usize = 1024;
+pub const INVERSE_LAMBDA: f64 = 0.5;
 
 #[derive(Clone, Debug)]
 pub struct TpeParams {
@@ -24,54 +25,40 @@ pub struct TpeParams {
     pub samples: usize,
     pub bw: f64,
     pub period: Duration,
+    pub trials_threshold: usize,
+    pub re_tpe_threshold: Duration,
 }
 
 impl Default for TpeParams {
     fn default() -> Self {
         Self {
-            gamma: 0.2,
-            samples: 32,
+            gamma: 0.15,
+            samples: 16,
             bw: 0.05,
-            period: Duration::from_secs(60),
+            period: Duration::from_secs(600),
+            trials_threshold: 5,
+            re_tpe_threshold: Duration::from_secs(3600),
         }
     }
 }
 
 #[derive(Clone, Debug)]
-pub struct Trial {
-    pub vec: Vec<f64>,
+pub struct TpeTrial {
+    pub iteration: u64,
+    pub vector: Vec<f64>,
     pub reward: f64,
+    #[allow(dead_code)]
+    pub active_start_ms: u64,
+    pub active_end_ms: u64,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct TpeState {
-    pub trials: Vec<Trial>,
+    pub trials: Vec<TpeTrial>,
     pub last_vec: Vec<f64>,
-    pub window_start: Option<Instant>,
-    pub last_corpus: Option<usize>,
-    pub last_cov: Option<usize>,
-    pub no_new_counter: usize,
     pub lock_best: bool,
     pub best_fixed: Vec<f64>,
     pub restored_once: bool,
-    pub first_window: bool,
-}
-
-impl Default for TpeState {
-    fn default() -> Self {
-        Self {
-            trials: Vec::new(),
-            last_vec: Vec::new(),
-            window_start: None,
-            last_corpus: None,
-            last_cov: None,
-            no_new_counter: 0,
-            lock_best: false,
-            best_fixed: Vec::new(),
-            restored_once: false,
-            first_window: true,
-        }
-    }
 }
 
 fn now_epoch_ms() -> u64 {
@@ -79,11 +66,175 @@ fn now_epoch_ms() -> u64 {
 }
 
 fn rand_gaussian(rng: &mut StdRand) -> f64 {
-    let u1 = (rng.next_float() as f64).clamp(f64::MIN_POSITIVE, 1.0);
-    let u2 = rng.next_float() as f64;
+    let u1 = rng.next_float().clamp(f64::MIN_POSITIVE, 1.0);
+    let u2 = rng.next_float();
     let r = (-2.0 * u1.ln()).sqrt();
     let theta = 2.0 * core::f64::consts::PI * u2;
     r * theta.cos()
+}
+
+pub fn alr(simplex_v: &[f64]) -> Vec<f64> {
+    let w = normalize_simplex_eps(simplex_v).unwrap_or_else(|_| {
+        if simplex_v.is_empty() {
+            Vec::new()
+        } else {
+            vec![1.0 / simplex_v.len() as f64; simplex_v.len()]
+        }
+    });
+
+    let k = w.len();
+    if k <= 1 {
+        return Vec::new();
+    }
+
+    let ref_w = w[k - 1].max(EPS);
+    w[..k - 1]
+        .iter()
+        .map(|&wi| (wi.max(EPS) / ref_w).ln())
+        .collect()
+}
+
+pub fn alr_inverse(u: &[f64]) -> Vec<f64> {
+    if u.is_empty() {
+        return vec![1.0];
+    }
+
+    let mut z = Vec::with_capacity(u.len() + 1);
+    z.extend_from_slice(u);
+    z.push(0.0);
+
+    softmax(&z)
+}
+
+pub fn softmax(z: &[f64]) -> Vec<f64> {
+    if z.is_empty() {
+        return Vec::new();
+    }
+    let max_z = z.iter().copied().fold(f64::NEG_INFINITY, |a, b| a.max(b));
+    let mut exps = z.iter().map(|v| (v - max_z).exp()).collect::<Vec<_>>();
+    let sum = exps.iter().copied().sum::<f64>();
+    if !sum.is_finite() || sum <= 0.0 {
+        return vec![1.0 / z.len() as f64; z.len()];
+    }
+    for v in &mut exps {
+        *v /= sum;
+    }
+    exps
+}
+
+pub fn logistic_normal_sample(center_simplex: &[f64], bw: f64, rng: &mut StdRand) -> Vec<f64> {
+    let center = normalize_simplex_eps(center_simplex).unwrap_or_else(|_| {
+        if center_simplex.is_empty() {
+            Vec::new()
+        } else {
+            vec![1.0 / center_simplex.len() as f64; center_simplex.len()]
+        }
+    });
+
+    if center.len() <= 1 {
+        return vec![1.0; center.len().max(1)];
+    }
+
+    let mut u = alr(&center);
+    let h = bw.max(EPS);
+    for x in &mut u {
+        *x += h * rand_gaussian(rng);
+    }
+
+    alr_inverse(&u)
+}
+
+pub fn logistic_normal_log_pdf(x_simplex: &[f64], center_simplex: &[f64], bw: f64) -> f64 {
+    if x_simplex.len() != center_simplex.len() || x_simplex.is_empty() {
+        return f64::NEG_INFINITY;
+    }
+
+    if x_simplex.len() == 1 {
+        return 0.0;
+    }
+
+    let h = bw.max(EPS);
+    let x = alr(x_simplex);
+    let c = alr(center_simplex);
+
+    if x.len() != c.len() {
+        return f64::NEG_INFINITY;
+    }
+
+    let d = x.len() as f64;
+    let sq = x
+        .iter()
+        .zip(c.iter())
+        .map(|(a, b)| {
+            let z = (a - b) / h;
+            z * z
+        })
+        .sum::<f64>();
+
+    -0.5 * sq - d * h.ln() - 0.5 * d * (2.0 * core::f64::consts::PI).ln()
+}
+
+pub fn kde_log_pdf(x_simplex: &[f64], centers: &[Vec<f64>], bw: f64) -> f64 {
+    if centers.is_empty() {
+        return f64::NEG_INFINITY;
+    }
+    let vals = centers
+        .iter()
+        .map(|c| logistic_normal_log_pdf(x_simplex, c, bw))
+        .collect::<Vec<_>>();
+    let max_v = vals
+        .iter()
+        .copied()
+        .fold(f64::NEG_INFINITY, |a, b| a.max(b));
+    if !max_v.is_finite() {
+        return f64::NEG_INFINITY;
+    }
+    let sum = vals.iter().map(|v| (v - max_v).exp()).sum::<f64>();
+    max_v + sum.ln() - (centers.len() as f64).ln()
+}
+
+pub fn sample_one_from_kde(centers: &[Vec<f64>], bw: f64, rng: &mut StdRand) -> Option<Vec<f64>> {
+    if centers.is_empty() {
+        return None;
+    }
+    let idx = rng.below(NonZeroUsize::new(centers.len()).unwrap());
+    Some(logistic_normal_sample(&centers[idx], bw, rng))
+}
+
+pub fn inverse_simplex(best: &[f64]) -> Vec<f64> {
+    let inv = best
+        .iter()
+        .map(|&w| 1.0 / (w.max(0.0) + EPS).powf(INVERSE_LAMBDA))
+        .collect::<Vec<_>>();
+    normalize_simplex_eps(&inv).unwrap_or_else(|_| vec![1.0 / best.len().max(1) as f64; best.len()])
+}
+
+fn normalize_simplex_exact(v: &[f64]) -> Result<Vec<f64>, Error> {
+    if v.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut sum = 0.0;
+    for (idx, &value) in v.iter().enumerate() {
+        if !value.is_finite() {
+            return Err(Error::illegal_argument(format!(
+                "BOFuzz vector error: non-finite simplex weight at index {}",
+                idx
+            )));
+        }
+        if value < 0.0 {
+            return Err(Error::illegal_argument(format!(
+                "BOFuzz vector error: negative simplex weight at index {}",
+                idx
+            )));
+        }
+        sum += value;
+    }
+    if !sum.is_finite() || sum <= 0.0 {
+        return Err(Error::illegal_argument(
+            "BOFuzz vector error: simplex denominator is zero".to_string(),
+        ));
+    }
+    Ok(v.iter().map(|value| *value / sum).collect())
 }
 
 pub struct TpeOptimizer {
@@ -105,309 +256,156 @@ impl TpeOptimizer {
             return;
         }
         s.restored_once = true;
-
         if let Some(meta) = state.metadata_map().get::<TpeHistoryMeta>() {
             s.trials.clear();
-            s.trials.reserve(meta.trials.len());
-            for (v, r, _ts) in &meta.trials {
-                s.trials.push(Trial {
-                    vec: v.clone(),
-                    reward: *r,
-                });
-            }
-
-            let max_trials = if meta.max_trials == 0 {
-                1024
-            } else {
-                meta.max_trials
-            };
-            if s.trials.len() > max_trials {
-                let drop_n = s.trials.len() - max_trials;
-                s.trials.drain(0..drop_n);
-            }
-
-            s.last_vec = meta.last_vec.clone();
-            s.last_corpus = None;
-            s.last_cov = None;
-
-            s.window_start = Some(Instant::now());
-            s.first_window = true;
-        }
-    }
-
-    pub fn is_first_window(&self) -> bool {
-        self.state.read().unwrap().first_window
-    }
-
-    pub fn finish_first_window(&self) {
-        self.state.write().unwrap().first_window = false;
-    }
-
-    pub fn window_due(&self) -> bool {
-        let s = self.state.read().unwrap();
-        match s.window_start {
-            None => true,
-            Some(t0) => t0.elapsed() >= self.params.period,
-        }
-    }
-
-    pub fn advance_window(&self) {
-        let mut s = self.state.write().unwrap();
-        s.window_start = Some(Instant::now());
-    }
-
-    pub fn window_elapsed(&self) -> Duration {
-        let s = self.state.read().unwrap();
-        match s.window_start {
-            None => Duration::ZERO,
-            Some(t0) => t0.elapsed(),
-        }
-    }
-
-    pub fn has_last_vec(&self) -> bool {
-        !self.state.read().unwrap().last_vec.is_empty()
-    }
-
-    pub fn init_vec_if_empty(&self, v0: &[f64]) {
-        let mut s = self.state.write().unwrap();
-        if s.last_vec.is_empty() {
-            s.last_vec = v0.to_vec();
-        }
-    }
-
-    pub fn observe(&self, vec: &[f64], reward: f64) {
-        let mut s = self.state.write().unwrap();
-        if let Some(last) = s.trials.last_mut() {
-            if vecn_eq(&last.vec, vec, 1e-6) {
-                if reward > last.reward {
-                    last.reward = reward;
+            for (i, (v, r, ts)) in meta.trials.iter().enumerate() {
+                if let Ok(simplex) = normalize_simplex_eps(v) {
+                    s.trials.push(TpeTrial {
+                        iteration: i as u64,
+                        vector: simplex,
+                        reward: *r,
+                        active_start_ms: *ts,
+                        active_end_ms: *ts,
+                    });
                 }
-                return;
             }
-        }
-
-        s.trials.push(Trial {
-            vec: vec.to_vec(),
-            reward,
-        });
-
-        const MAX_TRIALS: usize = 1024;
-        if s.trials.len() > MAX_TRIALS {
-            let drop_n = s.trials.len() - MAX_TRIALS;
-            s.trials.drain(0..drop_n);
+            s.last_vec = normalize_simplex_eps(&meta.last_vec).unwrap_or_default();
         }
     }
 
-    fn gen_kde_candidates<S: HasMetadata>(&self, state: &mut S, rng: &mut StdRand) -> usize {
-        let (lset, gset, _y_star) = match self.split_l_g() {
-            Some(x) => x,
-            None => return 0,
-        };
-
-        let pool = get_v_candidates(state);
-        let hist = {
-            let s = self.state.read().unwrap();
-            s.trials.iter().map(|t| t.vec.clone()).collect::<Vec<_>>()
-        };
-
-        let eps = 1e-6;
-        let mut best: Option<(f64, Vec<f64>)> = None;
-
-        for base_trial in &lset {
-            let base = &base_trial.vec;
-            let d = base.len();
-
-            let mut cand = vec![0.0; d];
-            for j in 0..d {
-                let z = rand_gaussian(rng);
-                let mut v = base[j] + self.params.bw * z;
-                if v < 0.0 {
-                    v = -v;
-                }
-                if v > 1.0 {
-                    v = 2.0 - v;
-                }
-                cand[j] = v.clamp(0.0, 1.0);
-            }
-            let cand = match project_vec(cand) {
-                Some(c) => c,
-                None => continue,
-            };
-
-            let dup_hist = hist
-                .iter()
-                .any(|h| h.len() == cand.len() && vecn_eq(h, &cand, 1e-3));
-            if dup_hist {
-                continue;
-            }
-            let dup_pool = pool
-                .iter()
-                .any(|p| p.len() == cand.len() && vecn_eq(p, &cand, 1e-3));
-            if dup_pool {
-                continue;
-            }
-
-            let l = kde_pdf_reflect(&lset, &cand, self.params.bw);
-            let g = kde_pdf_reflect(&gset, &cand, self.params.bw);
-            let score = if g > 0.0 { l / g } else { f64::INFINITY };
-            if score <= 1.0 + eps {
-                continue;
-            }
-
-            match best {
-                None => best = Some((score, cand)),
-                Some((best_s, _)) if score > best_s => best = Some((score, cand)),
-                _ => {}
-            }
-        }
-
-        if let Some((_score, chosen)) = best {
-            push_v_candidate(state, chosen);
-            1
-        } else {
-            0
-        }
+    pub fn set_last_vec(&self, v: &[f64]) {
+        let mut s = self.state.write().unwrap();
+        s.last_vec = normalize_simplex_eps(v).unwrap_or_else(|_| v.to_vec());
     }
 
-    pub fn suggest<S: HasMetadata>(&self, state: &mut S, rng: &mut StdRand) -> Vec<f64> {
-        {
-            let s = self.state.read().unwrap();
-            if s.lock_best && !s.best_fixed.is_empty() {
-                return s.best_fixed.clone();
-            }
-        }
+    #[allow(dead_code)]
+    pub fn last_vec(&self) -> Vec<f64> {
+        self.state.read().unwrap().last_vec.clone()
+    }
 
-        let _added = self.gen_kde_candidates(state, rng);
+    pub fn is_locked(&self) -> bool {
+        self.state.read().unwrap().lock_best
+    }
 
-        if let Some(v) = self.next_untried_from_pool(state) {
-            return v;
-        }
-
-        let active_dim = get_active_dim(state);
-        let vector_len = 1 + active_dim;
-
-        let best = {
-            let srd = self.state.read().unwrap();
-            let all_nonpos = !srd.trials.is_empty() && srd.trials.iter().all(|t| t.reward <= 0.0);
-            if all_nonpos {
-                srd.trials.first().map(|t| t.vec.clone())
-            } else {
-                None
-            }
-        }
-        .or_else(|| self.best_by_lg(vector_len))
-        .or_else(|| {
+    pub fn lock_best(&self) {
+        let best = self.best_by_reward().or_else(|| {
             let s = self.state.read().unwrap();
             if s.last_vec.is_empty() {
                 None
             } else {
                 Some(s.last_vec.clone())
             }
-        })
-        .unwrap_or_else(|| {
-            eprintln!("BOFuzz TPE warning: all generated candidates invalid; using deterministic uniform active vector");
-            let mut v = vec![0.5];
-            let d = if active_dim > 0 { active_dim } else { 1 };
-            let u = 1.0 / (d as f64).sqrt();
-            v.extend(std::iter::repeat(u).take(d));
-            v
         });
-
-        {
-            let mut s = self.state.write().unwrap();
-            s.best_fixed = best.clone();
-            s.lock_best = true;
+        let mut s = self.state.write().unwrap();
+        if let Some(best) = best {
+            s.best_fixed = best;
         }
-        best
+        s.lock_best = true;
     }
 
-    pub fn set_last_vec(&self, v: &[f64]) {
-        let mut s = self.state.write().unwrap();
-        s.last_vec = v.to_vec();
+    pub fn unlock(&self) {
+        self.state.write().unwrap().lock_best = false;
     }
 
-    pub fn last_vec(&self) -> Vec<f64> {
-        self.state.read().unwrap().last_vec.clone()
-    }
-
-    pub fn set_last_cov(&self, n: usize) {
-        let mut s = self.state.write().unwrap();
-        s.last_cov = Some(n);
-    }
-    pub fn take_reward_from_coverage(&self, cur_cov: usize) -> Option<f64> {
-        let mut s = self.state.write().unwrap();
-        let r = s.last_cov.map(|prev| (cur_cov as i64 - prev as i64) as f64);
-        s.last_cov = Some(cur_cov);
-        r
-    }
-
-    pub fn set_last_corpus(&self, n: usize) {
-        let mut s = self.state.write().unwrap();
-        s.last_corpus = Some(n);
-    }
-
-    pub fn take_reward_from_corpus(&self, cur_corpus: usize) -> Option<f64> {
-        let mut s = self.state.write().unwrap();
-        let r = s
-            .last_corpus
-            .map(|prev| (cur_corpus as i64 - prev as i64) as f64);
-        s.last_corpus = Some(cur_corpus);
-        r
-    }
-
-    pub fn persist_to_meta<S: HasMetadata>(&self, state: &mut S) {
+    pub fn best_vec(&self) -> Option<Vec<f64>> {
         let s = self.state.read().unwrap();
-        let meta = state
-            .metadata_map_mut()
-            .get_or_insert_with::<TpeHistoryMeta>(Default::default);
-
-        meta.trials.clear();
-        meta.trials.reserve(s.trials.len());
-        for t in &s.trials {
-            meta.trials.push((t.vec.clone(), t.reward, now_epoch_ms()));
+        if !s.best_fixed.is_empty() {
+            Some(s.best_fixed.clone())
+        } else {
+            drop(s);
+            self.best_by_reward()
         }
-        if meta.max_trials == 0 {
-            meta.max_trials = 1024;
-        }
-        if meta.trials.len() > meta.max_trials {
-            let drop_n = meta.trials.len() - meta.max_trials;
-            meta.trials.drain(0..drop_n);
-        }
-        meta.last_vec = s.last_vec.clone();
-        meta.last_corpus = s.last_corpus;
-        meta.last_cov = s.last_cov;
-        meta.last_check_ms = Some(now_epoch_ms());
     }
 
-    pub fn snapshot_trials_text(&self) -> String {
-        let s = self.state.read().unwrap();
-        let mut out = String::new();
-        let _ = writeln!(&mut out, "[tpe-trials] count={}", s.trials.len());
-        for (i, t) in s.trials.iter().enumerate() {
-            let vv = t
-                .vec
-                .iter()
-                .map(|x| format!("{:.4}", x))
-                .collect::<Vec<_>>()
-                .join(",");
-            let _ = writeln!(
-                &mut out,
-                "[tpe-trial #{i}] ΔEdges={:.3} vec=[{}] len={}",
-                t.reward,
-                vv,
-                t.vec.len()
-            );
+    pub fn observe_trial(
+        &self,
+        iteration: u64,
+        vector: &[f64],
+        reward: f64,
+        active_start_ms: u64,
+        active_end_ms: u64,
+    ) {
+        let Ok(vector) = normalize_simplex_eps(vector) else {
+            return;
+        };
+        let mut s = self.state.write().unwrap();
+        if let Some(last) = s.trials.last_mut() {
+            if last.iteration == iteration || vecn_eq(&last.vector, &vector, 1e-6) {
+                if reward > last.reward {
+                    last.reward = reward;
+                    last.active_end_ms = active_end_ms;
+                }
+                return;
+            }
         }
-        out
+        s.trials.push(TpeTrial {
+            iteration,
+            vector,
+            reward,
+            active_start_ms,
+            active_end_ms,
+        });
+        if s.trials.len() > MAX_TRIALS {
+            let drop_n = s.trials.len() - MAX_TRIALS;
+            s.trials.drain(0..drop_n);
+        }
+    }
+
+    pub fn enqueue_exact_then_neighbor_candidates<S: HasMetadata>(
+        &self,
+        state: &mut S,
+        exact_center: &[f64],
+        rng: &mut StdRand,
+    ) -> Result<(), Error> {
+        let active_dim = get_active_dim(state);
+        if exact_center.len() != active_dim {
+            return Err(Error::illegal_argument(format!(
+                "BOFuzz vector error: exact center length {} != active_dim {}",
+                exact_center.len(),
+                active_dim
+            )));
+        }
+        if active_dim == 0 {
+            return Ok(());
+        }
+
+        let exact_normalized_center = normalize_simplex_exact(exact_center)?;
+        push_v_candidate(state, exact_normalized_center.clone());
+        self.enqueue_samples_around(state, &exact_normalized_center, self.params.samples, rng);
+        Ok(())
+    }
+
+    pub fn enqueue_samples_around<S: HasMetadata>(
+        &self,
+        state: &mut S,
+        center: &[f64],
+        count: usize,
+        rng: &mut StdRand,
+    ) {
+        for _ in 0..count.max(1) {
+            let cand = logistic_normal_sample(center, self.params.bw, rng);
+            push_v_candidate(state, cand);
+        }
+    }
+
+    pub fn enqueue_inverse_candidates<S: HasMetadata>(&self, state: &mut S, rng: &mut StdRand) {
+        if let Some(best) = self.best_vec() {
+            let inv = inverse_simplex(&best);
+            self.enqueue_samples_around(state, &inv, self.params.samples, rng);
+            self.unlock();
+        }
     }
 
     pub fn next_untried_from_pool<S: HasMetadata>(&self, state: &mut S) -> Option<Vec<f64>> {
-        let hist = {
-            let s = self.state.read().unwrap();
-            s.trials.iter().map(|t| &t.vec).cloned().collect::<Vec<_>>()
-        };
+        let hist = self
+            .state
+            .read()
+            .unwrap()
+            .trials
+            .iter()
+            .map(|t| t.vector.clone())
+            .collect::<Vec<_>>();
         let mut pool = get_v_candidates(state);
-
         while let Some(front) = pool.first() {
             let seen = hist
                 .iter()
@@ -418,178 +416,327 @@ impl TpeOptimizer {
                 break;
             }
         }
-
         let out = if pool.is_empty() {
             None
         } else {
             let raw = pool.remove(0);
-            match project_vec(raw) {
-                Some(projected) => Some(projected),
-                None => {
-                    eprintln!(
-                        "BOFuzz TPE warning: candidate from pool has zero-norm weights, skipping"
-                    );
-                    None
-                }
-            }
+            normalize_simplex_eps(&raw).ok()
         };
         replace_v_candidates(state, pool);
-
         out
     }
 
-    pub fn split_l_g(&self) -> Option<(Vec<Trial>, Vec<Trial>, f64)> {
+    fn init_candidate<S: HasMetadata>(&self, state: &mut S, rng: &mut StdRand) -> Option<Vec<f64>> {
+        if let Some(v) = self.next_untried_from_pool(state) {
+            return Some(v);
+        }
+
+        let active_dim = get_active_dim(state);
+        if active_dim == 0 {
+            return None;
+        }
+
+        let center = state
+            .metadata_map()
+            .get::<VecMaskRuntimeMeta>()
+            .map(|m| m.normalized_credit_init_v.clone())
+            .filter(|v| v.len() == active_dim)
+            .and_then(|v| normalize_simplex_eps(&v).ok())
+            .unwrap_or_else(|| vec![1.0 / active_dim as f64; active_dim]);
+
+        Some(logistic_normal_sample(&center, self.params.bw, rng))
+    }
+
+    pub fn suggest_next<S: HasMetadata>(
+        &self,
+        state: &mut S,
+        rng: &mut StdRand,
+    ) -> Option<Vec<f64>> {
+        if self.is_locked() {
+            return None;
+        }
+
+        if let Some(v) = self.next_untried_from_pool(state) {
+            return Some(v);
+        }
+
+        let Some((good, bad)) = self.split_good_bad() else {
+            return self.init_candidate(state, rng);
+        };
+
+        let mut best_candidate: Option<Vec<f64>> = None;
+        let mut best_score = f64::NEG_INFINITY;
+
+        for _ in 0..self.params.samples.max(1) {
+            let Some(candidate) = sample_one_from_kde(&good, self.params.bw, rng) else {
+                continue;
+            };
+
+            let log_l = kde_log_pdf(&candidate, &good, self.params.bw);
+            let log_g = kde_log_pdf(&candidate, &bad, self.params.bw);
+            let score = log_l - log_g;
+
+            if score.is_finite() && score > best_score {
+                best_score = score;
+                best_candidate = Some(candidate);
+            }
+        }
+
+        if best_score.is_finite() && best_score > 0.0 {
+            best_candidate
+        } else {
+            self.lock_best();
+            None
+        }
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn split_good_bad(&self) -> Option<(Vec<Vec<f64>>, Vec<Vec<f64>>)> {
         let s = self.state.read().unwrap();
-        if s.trials.len() < 5 {
+
+        if s.trials.len() < self.params.trials_threshold.max(2) {
             return None;
         }
 
         let mut trials = s.trials.clone();
-        drop(s);
+        trials.sort_by(|a, b| {
+            b.reward
+                .partial_cmp(&a.reward)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
-        trials.sort_by(|a, b| a.reward.partial_cmp(&b.reward).unwrap());
-        let n = trials.len();
-        let k = ((n as f64 * self.params.gamma).ceil() as usize).clamp(1, n);
-        let mut y_star = trials[n - k].reward;
+        let k = ((trials.len() as f64 * self.params.gamma).ceil() as usize)
+            .clamp(1, trials.len());
 
-        if y_star <= 0.0 {
-            if let Some(min_pos) = trials
-                .iter()
-                .filter(|t| t.reward > 0.0)
-                .map(|t| t.reward)
-                .min_by(|a, b| a.partial_cmp(b).unwrap())
-            {
-                y_star = min_pos;
-            } else {
-                return None;
-            }
-        }
+        let threshold = trials[k - 1].reward;
 
-        let mut lset = Vec::new();
-        let mut gset = Vec::new();
-        for t in trials.into_iter() {
-            if t.reward >= y_star {
-                lset.push(t);
-            } else {
-                gset.push(t);
-            }
-        }
-        if lset.is_empty() || gset.is_empty() {
-            return None;
-        }
-        Some((lset, gset, y_star))
-    }
+        let mut good = Vec::new();
+        let mut bad = Vec::new();
 
-    pub fn l_over_g(&self, v: &[f64]) -> Option<f64> {
-        let (lset, gset, _) = self.split_l_g()?;
-        let l = kde_pdf_reflect(&lset, v, self.params.bw);
-        let g = kde_pdf_reflect(&gset, v, self.params.bw);
-        if g > 0.0 {
-            Some(l / g)
-        } else {
-            Some(f64::INFINITY)
-        }
-    }
-
-    pub fn best_by_lg(&self, min_len: usize) -> Option<Vec<f64>> {
-        let (lset, gset, _) = self.split_l_g()?;
-        let s = self.state.read().unwrap();
-        let mut best: Option<(f64, Vec<f64>)> = None;
         for t in &s.trials {
-            if t.vec.len() < min_len {
-                continue;
-            }
-            let l = kde_pdf_reflect(&lset, &t.vec, self.params.bw);
-            let g = kde_pdf_reflect(&gset, &t.vec, self.params.bw);
-            let score = if g > 0.0 { l / g } else { f64::INFINITY };
-            match best {
-                None => best = Some((score, t.vec.clone())),
-                Some((bs, _)) if score > bs => best = Some((score, t.vec.clone())),
-                _ => {}
+            if t.reward >= threshold {
+                good.push(t.vector.clone());
+            } else {
+                bad.push(t.vector.clone());
             }
         }
-        best.map(|(_, v)| v)
-    }
-}
 
-fn gaussian_pdf(z: f64) -> f64 {
-    const INV_SQRT_2PI: f64 = 0.398_942_280_401_432_7;
-    INV_SQRT_2PI * (-0.5 * z * z).exp()
-}
-
-fn reflect_pdf_1d(x: f64, mu: f64, h: f64) -> f64 {
-    let z1 = (x - mu) / h;
-    let z2 = (x + mu) / h;
-    let z3 = (2.0 - (x + mu)) / h;
-    (gaussian_pdf(z1) + gaussian_pdf(z2) + gaussian_pdf(z3)) / h
-}
-
-fn kde_pdf_reflect(set: &[Trial], x: &[f64], h: f64) -> f64 {
-    let d = x.len();
-    let n = set.len() as f64;
-    let mut s = 0.0;
-    for t in set.iter() {
-        let mut p = 1.0;
-        for j in 0..d {
-            p *= reflect_pdf_1d(x[j], t.vec[j], h);
-        }
-        s += p;
-    }
-    s / n
-}
-
-fn sample_from_kde_reflect(set: &[Trial], h: f64, rng: &mut StdRand) -> Option<Vec<f64>> {
-    let d = set[0].vec.len();
-    let base = set[rng.below(NonZeroUsize::new(set.len()).unwrap())]
-        .vec
-        .clone();
-    let mut out = vec![0.0; d];
-    for j in 0..d {
-        let z = rand_gaussian(rng);
-        let mut v = base[j] + h * z;
-        if v < 0.0 {
-            v = -v;
-        }
-        if v > 1.0 {
-            v = 2.0 - v;
-        }
-        v = v.clamp(0.0, 1.0);
-        out[j] = v;
-    }
-    project_vec(out)
-}
-
-/// Project a TPE candidate vector: clamp alpha, L2-normalize weights.
-/// Returns None if the active weights have zero norm (reject/resample).
-pub fn project_vec(mut v: Vec<f64>) -> Option<Vec<f64>> {
-    if v.is_empty() {
-        return Some(v);
-    }
-    v[0] = v[0].clamp(0.0, 1.0);
-
-    let d = v.len();
-    if d > 1 {
-        let mut norm2 = 0.0;
-        for j in 1..d {
-            norm2 += v[j] * v[j];
-        }
-        if norm2 > 0.0 {
-            let inv = 1.0 / norm2.sqrt();
-            for j in 1..d {
-                v[j] *= inv;
-            }
+        if good.is_empty() || bad.is_empty() {
+            None
         } else {
-            return None;
+            Some((good, bad))
         }
     }
-    Some(v)
+
+    fn best_by_reward(&self) -> Option<Vec<f64>> {
+        self.state
+            .read()
+            .unwrap()
+            .trials
+            .iter()
+            .max_by(|a, b| a.reward.partial_cmp(&b.reward).unwrap())
+            .map(|t| t.vector.clone())
+    }
+
+    pub fn persist_to_meta<S: HasMetadata>(&self, state: &mut S) {
+        let s = self.state.read().unwrap();
+        let meta = state
+            .metadata_map_mut()
+            .get_or_insert_with::<TpeHistoryMeta>(Default::default);
+        meta.trials.clear();
+        for t in &s.trials {
+            meta.trials
+                .push((t.vector.clone(), t.reward, t.active_end_ms));
+        }
+        meta.max_trials = MAX_TRIALS;
+        meta.last_vec = s.last_vec.clone();
+        meta.last_check_ms = Some(now_epoch_ms());
+    }
+
+    pub fn snapshot_trials_text(&self) -> String {
+        let s = self.state.read().unwrap();
+        let mut out = String::new();
+        let _ = writeln!(&mut out, "[tpe-trials] count={}", s.trials.len());
+        for (i, t) in s.trials.iter().enumerate() {
+            let vv = t
+                .vector
+                .iter()
+                .map(|x| format!("{:.4}", x))
+                .collect::<Vec<_>>()
+                .join(",");
+            let _ = writeln!(
+                &mut out,
+                "[tpe-trial #{i}] iteration={} reward=ΔEdges={:.3} simplex=[{}] len={}",
+                t.iteration,
+                t.reward,
+                vv,
+                t.vector.len()
+            );
+        }
+        out
+    }
 }
 
-fn jitter_and_project(v: &[f64], rng: &mut StdRand) -> Option<Vec<f64>> {
-    let mut out = v.to_vec();
-    for x in &mut out {
-        let delta = 0.05 * (rng.next_float() as f64 - 0.5) * 2.0;
-        *x = (*x + delta).clamp(0.0, 1.0);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::feature_sched::{set_schema_info, FeatureSpec};
+    use libafl::common::HasMetadata;
+    use libafl::state::NopState;
+    use libafl_bolts::rands::StdRand;
+
+    fn assert_close(actual: &[f64], expected: &[f64], eps: f64) {
+        assert_eq!(actual.len(), expected.len());
+        for (idx, (a, e)) in actual.iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (a - e).abs() <= eps,
+                "index {idx}: actual {a} != expected {e}"
+            );
+        }
     }
-    project_vec(out)
+
+    fn assert_valid_simplex(v: &[f64], expected_len: usize) {
+        assert_eq!(v.len(), expected_len);
+        assert!(v.iter().all(|x| x.is_finite() && *x >= 0.0));
+        let sum = v.iter().copied().sum::<f64>();
+        assert!((sum - 1.0).abs() <= 1e-6, "simplex sum was {sum}");
+    }
+
+    fn contains_vec(vectors: &[Vec<f64>], needle: &[f64]) -> bool {
+        vectors.iter().any(|v| vecn_eq(v, needle, 1e-6))
+    }
+
+    fn test_state(active_dim: usize, init_v: Vec<f64>) -> NopState<()> {
+        let mut state = NopState::<()>::new();
+        let features = (0..active_dim)
+            .map(|idx| FeatureSpec {
+                id: format!("f{idx}"),
+                name: format!("feature_{idx}"),
+                group: None,
+                aliases: None,
+            })
+            .collect::<Vec<_>>();
+        set_schema_info(
+            &mut state,
+            4,
+            features.clone(),
+            vec![true; active_dim],
+            features.clone(),
+        );
+        state.add_metadata(VecMaskRuntimeMeta {
+            mask_committed: true,
+            tpe_init_committed: true,
+            effective_mask: vec![true; active_dim],
+            selected_feature_names: features.iter().map(|f| f.name.clone()).collect(),
+            selected_schema_indices: (0..active_dim).collect(),
+            normalized_credit_init_v: init_v,
+            ..Default::default()
+        });
+        state
+    }
+
+    fn optimizer(gamma: f64, samples: usize, trials_threshold: usize) -> TpeOptimizer {
+        TpeOptimizer::new(TpeParams {
+            gamma,
+            samples,
+            trials_threshold,
+            bw: 0.05,
+            ..Default::default()
+        })
+    }
+
+    fn push_trial(opt: &TpeOptimizer, iteration: u64, vector: Vec<f64>, reward: f64) {
+        opt.state.write().unwrap().trials.push(TpeTrial {
+            iteration,
+            vector,
+            reward,
+            active_start_ms: 0,
+            active_end_ms: 1,
+        });
+    }
+
+    #[test]
+    fn alr_inverse_round_trips_simplex() {
+        let simplex = vec![0.2, 0.3, 0.5];
+        let expected = normalize_simplex_eps(&simplex).unwrap();
+        let u = alr(&simplex);
+        let round_trip = alr_inverse(&u);
+
+        assert_close(&round_trip, &expected, 1e-10);
+    }
+
+    #[test]
+    fn alr_inverse_of_empty_returns_singleton_simplex() {
+        assert_eq!(alr_inverse(&[]), vec![1.0]);
+    }
+
+    #[test]
+    fn logistic_normal_sample_returns_valid_simplex() {
+        let mut rng = StdRand::with_seed(7);
+        let sample = logistic_normal_sample(&[0.2, 0.3, 0.5], 0.05, &mut rng);
+
+        assert_valid_simplex(&sample, 3);
+    }
+
+    #[test]
+    fn split_good_bad_includes_zero_reward_trials() {
+        let opt = optimizer(0.5, 4, 4);
+        let zero_reward = vec![0.2, 0.1, 0.7];
+        push_trial(&opt, 0, vec![0.7, 0.2, 0.1], 10.0);
+        push_trial(&opt, 1, vec![0.2, 0.7, 0.1], 5.0);
+        push_trial(&opt, 2, zero_reward.clone(), 0.0);
+        push_trial(&opt, 3, vec![0.4, 0.4, 0.2], 1.0);
+
+        let (good, bad) = opt.split_good_bad().unwrap();
+
+        assert_eq!(good.len() + bad.len(), 4);
+        assert!(contains_vec(&bad, &zero_reward));
+    }
+
+    #[test]
+    fn split_good_bad_returns_none_when_all_rewards_tied() {
+        let opt = optimizer(0.5, 4, 2);
+        push_trial(&opt, 0, vec![0.8, 0.2], 0.0);
+        push_trial(&opt, 1, vec![0.2, 0.8], 0.0);
+
+        assert!(opt.split_good_bad().is_none());
+    }
+
+    #[test]
+    fn split_good_bad_uses_total_trial_threshold_not_positive_threshold() {
+        let opt = optimizer(0.34, 4, 3);
+        push_trial(&opt, 0, vec![0.8, 0.2], 2.0);
+        push_trial(&opt, 1, vec![0.5, 0.5], 1.0);
+        push_trial(&opt, 2, vec![0.2, 0.8], 0.0);
+
+        let (good, bad) = opt.split_good_bad().unwrap();
+
+        assert_eq!(good.len(), 2);
+        assert_eq!(bad.len(), 1);
+    }
+
+    #[test]
+    fn suggest_next_falls_back_to_init_candidate_when_split_unavailable() {
+        let mut state = test_state(3, vec![0.2, 0.3, 0.5]);
+        let opt = optimizer(0.5, 4, 5);
+        let mut rng = StdRand::with_seed(11);
+
+        let candidate = opt.suggest_next(&mut state, &mut rng).unwrap();
+
+        assert_valid_simplex(&candidate, 3);
+        assert!(!opt.is_locked());
+    }
+
+    #[test]
+    fn suggest_next_locks_when_best_density_ratio_is_non_positive() {
+        let mut state = test_state(2, vec![0.5, 0.5]);
+        let opt = optimizer(0.5, 4, 2);
+        push_trial(&opt, 0, vec![0.6, 0.4], 1.0);
+        push_trial(&opt, 1, vec![0.6, 0.4], 0.0);
+        let mut rng = StdRand::with_seed(13);
+
+        assert!(opt.suggest_next(&mut state, &mut rng).is_none());
+        assert!(opt.is_locked());
+    }
 }
