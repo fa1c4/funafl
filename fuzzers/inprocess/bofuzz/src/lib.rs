@@ -558,14 +558,14 @@ pub extern "C" fn libafl_main() {
                 .long("tpe-bw")
                 .value_parser(clap::value_parser!(f64))
                 .default_value("0.05")
-                .help("Logit-space KDE bandwidth")
+                .help("ALR-space KDE bandwidth")
         )
         .arg(
             Arg::new("trials-threshold")
                 .long("trials-threshold")
                 .value_parser(clap::value_parser!(usize))
                 .default_value("5")
-                .help("Positive-reward trials required before KDE TPE")
+                .help("Minimum total post-exploration trials required before KDE TPE")
         )
         .arg(
             Arg::new("re-tpe-threshold-secs")

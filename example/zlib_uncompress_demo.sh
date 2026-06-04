@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+
+# Usage:
+# export IDA_DIR=/path/to/ida-pro-9.3
+# ./example/zlib_uncompress_demo.sh
+
 set -euo pipefail
 
 # =========================
@@ -161,9 +166,7 @@ fi
 DEFAULT_ARGS=(
   --features-schema "${FEATURE_SCHEMA}"
   --features-map "${FEATURE_MAP}"
-  --vec-mask auto-credit
-  --credit-top-k "${CREDIT_TOP_K}"
-  --alpha 0.6
+  --alpha 0.85
   --feat-mode 1
   --explore-time-secs 600
   --tpe-period-secs 300

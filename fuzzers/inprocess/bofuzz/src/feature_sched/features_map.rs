@@ -528,40 +528,37 @@ pub fn combine_feature_matrix_to_weights(
     if d == 0 {
         return Vec::new();
     }
-    let inv_sqrt_d = 1.0f64 / (d as f64).sqrt();
 
-    // BOFuzz externally uses a simplex vector. The historical dot/magnitude
-    // formula expects a direction vector, so normalize internally only here.
-    let mut v = vec![0.0; d];
-    let n = d.min(v_in.len());
-    v[..n].copy_from_slice(&v_in[..n]);
-    let norm = v.iter().map(|x| x * x).sum::<f64>().sqrt();
-    if norm > 0.0 {
-        for w in v.iter_mut() {
-            *w /= norm;
-        }
+    let weights = if v_in.len() == d {
+        normalize_simplex_eps(v_in).unwrap_or_else(|_| equal_simplex(d))
     } else {
-        let u = 1.0f64 / (d as f64).sqrt();
-        v = vec![u; d];
-    }
+        equal_simplex(d)
+    };
 
-    let expected_len = map
-        .get(&active_feature_names[0])
-        .map(|a| a.len())
+    let expected_len = active_feature_names
+        .iter()
+        .find_map(|name| map.get(name).map(|arr| arr.len()))
         .unwrap_or(0);
 
     let mut out = Vec::with_capacity(expected_len);
     for i in 0..expected_len {
-        let mut z = vec![0.0f64; d];
+        let mut total = 0.0;
         for (j, name) in active_feature_names.iter().enumerate() {
-            if let Some(arr) = map.get(name) {
-                z[j] = arr.get(i).copied().unwrap_or(0.0);
+            let val = map
+                .get(name)
+                .and_then(|arr| arr.get(i))
+                .copied()
+                .unwrap_or(0.0);
+
+            if val.is_finite() && val > 0.0 {
+                total += weights[j] * val;
             }
         }
-        let mag = z.iter().map(|x| x * x).sum::<f64>().sqrt();
-        let dot = z.iter().zip(v.iter()).map(|(a, b)| a * b).sum::<f64>();
-        let w = (dot * inv_sqrt_d) * mag;
-        out.push(if w.is_finite() { w.max(0.0) } else { 0.0 });
+        out.push(if total.is_finite() {
+            total.max(0.0)
+        } else {
+            0.0
+        });
     }
     out
 }
@@ -720,4 +717,55 @@ pub fn apply_v_to_features<S: HasMetadata>(
     set_current_weight_vec(state, simplex_weights);
 
     Ok(())
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn assert_close(actual: &[f64], expected: &[f64]) {
+        assert_eq!(actual.len(), expected.len());
+        for (idx, (a, e)) in actual.iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (a - e).abs() <= 1e-5,
+                "index {idx}: actual {a} != expected {e}"
+            );
+        }
+    }
+
+    #[test]
+    fn combine_feature_matrix_uses_direct_simplex_weighted_sum() {
+        let mut map = HashMap::new();
+        map.insert("a".to_string(), vec![1.0, 0.0, 0.5]);
+        map.insert("b".to_string(), vec![0.0, 1.0, 0.5]);
+        let names = vec!["a".to_string(), "b".to_string()];
+
+        let out = combine_feature_matrix_to_weights(&map, &[0.25, 0.75], &names);
+
+        assert_close(&out, &[0.25, 0.75, 0.5]);
+    }
+
+    #[test]
+    fn combine_feature_matrix_falls_back_to_equal_simplex_on_wrong_len() {
+        let mut map = HashMap::new();
+        map.insert("a".to_string(), vec![1.0, 0.0, 0.5]);
+        map.insert("b".to_string(), vec![0.0, 1.0, 0.5]);
+        let names = vec!["a".to_string(), "b".to_string()];
+
+        let out = combine_feature_matrix_to_weights(&map, &[1.0], &names);
+
+        assert_close(&out, &[0.5, 0.5, 0.5]);
+    }
+
+    #[test]
+    fn combine_feature_matrix_missing_features_contribute_zero() {
+        let mut map = HashMap::new();
+        map.insert("a".to_string(), vec![2.0, 0.5]);
+        let names = vec!["missing".to_string(), "a".to_string()];
+
+        let out = combine_feature_matrix_to_weights(&map, &[0.5, 0.5], &names);
+
+        assert_close(&out, &[1.0, 0.25]);
+    }
 }

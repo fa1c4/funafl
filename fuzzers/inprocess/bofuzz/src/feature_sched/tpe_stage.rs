@@ -689,13 +689,14 @@ where
                     state.add_metadata(meta);
                     return Ok(());
                 }
-                let last_new = meta.last_new_edges_ms.unwrap_or(now);
+                let last_new = meta.last_new_edges_ms.or(meta.active_start_ms).unwrap_or(now);
                 if now.saturating_sub(last_new)
                     >= self.opt.params.re_tpe_threshold.as_millis() as u64
                 {
                     self.opt.enqueue_inverse_candidates(state, &mut self.rng);
                     maybe_export_runtime_data(state, true)?;
-                    if let Some(next) = self.opt.next_untried_from_pool(state) {
+
+                    if let Some(next) = self.opt.suggest_next(state, &mut self.rng) {
                         self.start_pending_recompute(state, next)?;
                     }
                 }
