@@ -4,6 +4,9 @@ need libs:
 numpy
 pandas
 matplotlib
+
+Usage:
+cd eval/src && python rq1_eval_coverage.py
 '''
 import numpy as np
 import pandas as pd
@@ -20,41 +23,59 @@ import math
 figure_save_name = "fuzzer_coverage_evaluation"
 
 colors = {
-    "mopt": "#ff7f0e",
-    "aflplusplus": "#2ca02c",
-    "aflplusplus_406_dipri_ah": "#e377c2",
-    "aflplusplus_406_dipri_vh": "#9467bd",
-    "bazzafl": "#17becf",
-    "libfuzzer": "#1f77b4",
-    "libafl": "#8c564b",
-    "libfun": "#d62728",
+    "AFL++": "#2ca02c",
+    "TortoiseFuzz": "#17becf",
+    "K-Schd": "#1f77b4",
+    "WingFuzz": "#ff7f0e",
+    "FunFuzz": "#9467bd",
+    "LibAFL": "#8c564b",
+    "BOFuzz": "#d62728",
 }
 
-fuzzer_whitelist = ["aflplusplus", "aflplusplus_406_dipri_ah", "bazzafl", "libfuzzer", "libafl", "libfun"]
-ordered_fuzzers = list(fuzzer_whitelist)
+fuzzer_whitelist = [
+    "aflplusplus",
+    "tortoisefuzz",
+    "kscheduler_libfuzzer",
+    "wingfuzz",
+    "funfuzz",
+    "libfuzzer",
+    "libafl",
+    "libfun",
+    "bofuzz",
+    "funafl",
+]
+ordered_fuzzers = [
+    "AFL++",
+    "TortoiseFuzz",
+    "K-Schd",
+    "WingFuzz",
+    "FunFuzz",
+    "LibAFL",
+    "BOFuzz",
+]
 
-# (1) marker per fuzzer (line style统一为 '-')
+# (1) marker per fuzzer
 markers = {
-    "aflplusplus": "o",
-    "aflplusplus_406_dipri_ah": "x",
-    "bazzafl": "*",
-    "libfuzzer": "^",
-    "libafl": "s",
-    "libfun": "D",
+    "AFL++": "o",
+    "TortoiseFuzz": "p",
+    "K-Schd": "^",
+    "WingFuzz": "x",
+    "FunFuzz": "*",
+    "LibAFL": "s",
+    "BOFuzz": "D",
 }
 
 mapping_norm_names = {
-    "fairfuzz": "FairFuzz",
-    "mopt": "MOpt",
     "aflplusplus": "AFL++",
-    "aflplusplus_406_dipri_ah": "DiPri",
-    "aflplusplus_406_dipri_vh": "DiPri-VH",
-    "aflplusplus_406_z": "DiPri-Z",
-    "bazzafl": "BazzAFL",
-    "funafl": "FunAFL",
-    "libfuzzer": "libFuzzer",
+    "libfuzzer": "K-Schd",
+    "kscheduler_libfuzzer": "K-Schd",
+    "wingfuzz": "WingFuzz",
+    "tortoisefuzz": "TortoiseFuzz",
+    "funfuzz": "FunFuzz",
     "libafl": "LibAFL",
-    "libfun": "FunAFL",
+    "funafl": "BOFuzz",
+    "libfun": "BOFuzz",
+    "bofuzz": "BOFuzz",
 }
 
 benchmark_whitelist = [
@@ -73,7 +94,8 @@ benchmark_whitelist = [
 ]
 
 report_data_paths = [
-    "../data/merged_report_data.csv"
+    "../data/merged_report_data.csv",
+    "../data/baselines_report_data_alpha.csv",
 ]
 
 MIN_X_HOURS = 0.25   # 15min
@@ -141,7 +163,7 @@ def baseline_y_at_15min(target_df: pd.DataFrame, fuzzers: List[str], t0_hours: f
     vals = []
     t0_sec = int(round(t0_hours * 3600))
     for f in fuzzers:
-        fdf = target_df[target_df["fuzzer"] == f]
+        fdf = target_df[target_df["fuzzer_norm"] == f]
         if fdf.empty:
             continue
         stats = calculate_fuzzer_stats(fdf)
@@ -190,17 +212,21 @@ df_filtered = df_filtered[df_filtered["benchmark"].isin(benchmark_whitelist)].co
 if df_filtered.empty:
     raise SystemExit("No data found for the specified benchmarks!")
 
-targets = sorted(df_filtered["benchmark"].unique())
+df_filtered["fuzzer_norm"] = df_filtered["fuzzer"].map(mapping_norm_names).fillna(df_filtered["fuzzer"])
+
+# targets = sorted(df_filtered["benchmark"].unique())
+targets = [b for b in benchmark_whitelist if b in df_filtered["benchmark"].unique()]
 print(f"Targets to plot: {targets}")
 
 # =========================
 # Plot
 # =========================
 n_targets = len(targets)
-n_cols = 4
-n_rows = (n_targets + n_cols - 1) // n_cols
+n_rows = 2
+n_cols = 6
 
-fig, axes = plt.subplots(n_rows, n_cols, figsize=(16, 4 * n_rows))
+fig, axes = plt.subplots(n_rows, n_cols, figsize=(24, 7.5))
+
 if n_rows == 1:
     axes = axes.reshape(1, -1)
 
@@ -211,13 +237,20 @@ for idx, target in enumerate(targets):
 
     target_data = df_filtered[df_filtered["benchmark"] == target]
     if target_data.empty:
-        ax.set_title(f"({chr(97+idx)}) {target}", fontsize=14, fontweight="bold")
-        ax.text(0.5, 0.5, "No data available", transform=ax.transAxes,
-                ha="center", va="center", fontsize=14)
+        ax.text(
+            0.5, -0.28,
+            f"({chr(97+idx)}) {target}",
+            transform=ax.transAxes,
+            ha="center",
+            va="top",
+            fontsize=13,
+            fontweight="bold",
+            clip_on=False,
+        )
         continue
 
     for fuzzer in ordered_fuzzers:
-        fuzzer_data = target_data[target_data["fuzzer"] == fuzzer]
+        fuzzer_data = target_data[target_data["fuzzer_norm"] == fuzzer]
         if fuzzer_data.empty:
             continue
 
@@ -233,7 +266,7 @@ for idx, target in enumerate(targets):
             color=colors.get(fuzzer, "black"),
             linestyle="-",
             marker=mk,
-            label=mapping_norm_names.get(fuzzer, fuzzer),
+            label=fuzzer,
             markersize=4,
             linewidth=1.5
         )
@@ -246,12 +279,20 @@ for idx, target in enumerate(targets):
             alpha=0.2
         )
 
-    ax.set_title(f"({chr(97+idx)}) {target}", fontsize=14, fontweight="bold")
+    ax.text(
+        0.5, -0.28,
+        f"({chr(97+idx)}) {target}",
+        transform=ax.transAxes,
+        ha="center",
+        va="top",
+        fontsize=13,
+        fontweight="bold",
+        clip_on=False,
+    )
 
-    if row == n_rows - 1:
-        ax.set_xlabel("Time (hours)", fontsize=14)
+    ax.set_xlabel("Time (hours)", fontsize=14)
     if col == 0:
-        ax.set_ylabel("Edges Covered", fontsize=14)
+        ax.set_ylabel("Edges Covered", fontsize=14, fontweight="bold")
 
     ax.grid(True, alpha=0.3)
     ax.set_xlim(MIN_X_HOURS, MAX_X_HOURS)
@@ -271,6 +312,13 @@ for idx, target in enumerate(targets):
 
     ax.set_xticks(ticks)
     ax.set_xticklabels([str(int(t)) for t in ticks])
+
+    ax.tick_params(axis="both", labelsize=12)
+    for tick in ax.get_xticklabels():
+        tick.set_fontweight("bold")
+
+    for tick in ax.get_yticklabels():
+        tick.set_fontweight("bold")
 
     # y-limits: bottom=min(mean@15min); top=max visible (>=15min)
     y_bottom = baseline_y_at_15min(target_data, ordered_fuzzers, MIN_X_HOURS)
@@ -292,14 +340,16 @@ for idx in range(n_targets, n_rows * n_cols):
     axes[r, c].set_visible(False)
 
 # Figure-level legend (top)
-handles, labels = None, None
+handles_by_label = {}
 for idx in range(n_targets):
     r = idx // n_cols
     c = idx % n_cols
     h, l = axes[r, c].get_legend_handles_labels()
-    if h:
-        handles, labels = h, l
-        break
+    for handle, label in zip(h, l):
+        handles_by_label.setdefault(label, handle)
+
+labels = [fuzzer for fuzzer in ordered_fuzzers if fuzzer in handles_by_label]
+handles = [handles_by_label[label] for label in labels]
 
 if handles:
     fig.legend(
@@ -308,9 +358,9 @@ if handles:
         loc="upper center",
         bbox_to_anchor=(0.5, 0.985),
         ncol=len(ordered_fuzzers),
-        fontsize=20,
+        fontsize=16,
         frameon=False,
-        markerscale=2,
+        markerscale=1.6,
     )
 
 # Leave a small space for legend (not too large)
