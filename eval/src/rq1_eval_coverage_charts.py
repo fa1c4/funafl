@@ -352,16 +352,26 @@ labels = [fuzzer for fuzzer in ordered_fuzzers if fuzzer in handles_by_label]
 handles = [handles_by_label[label] for label in labels]
 
 if handles:
-    fig.legend(
+    legend = fig.legend(
         handles,
         labels,
         loc="upper center",
         bbox_to_anchor=(0.5, 0.985),
         ncol=len(ordered_fuzzers),
-        fontsize=16,
+        prop={
+            "size": 16,
+            "weight": "bold",
+        },
         frameon=False,
-        markerscale=1.6,
+        markerscale=2.2,
+        handlelength=2.4,
+        handletextpad=0.5,
+        columnspacing=1.2,
     )
+
+    for handle in legend.legend_handles:
+        handle.set_linewidth(2.5)
+        handle.set_markersize(8)
 
 # Leave a small space for legend (not too large)
 plt.tight_layout(rect=[0, 0, 1, 0.94])
