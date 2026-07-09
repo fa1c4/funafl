@@ -17,12 +17,12 @@ from pathlib import Path
 import sys
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.colors import ListedColormap, BoundaryNorm
+from matplotlib.colors import Normalize, ListedColormap
 from matplotlib.patches import Rectangle
 
 
 FEATURES = [f"I{i}" for i in range(8)] + [f"S{i}" for i in range(8)]
-DISPLAY_FEATURES = [f"I{i:02d}" for i in range(8)] + [f"S{i:02d}" for i in range(8)]
+DISPLAY_FEATURES = [f"I{i:01d}" for i in range(8)] + [f"S{i:01d}" for i in range(8)]
 
 # Selected Gini-derived guiding core.
 SELECTED_FEATURES = {"I1", "I4", "I5", "I6", "S5", "S6", "S7"}
@@ -43,32 +43,22 @@ TARGET_DISPLAY_NAMES = {
 }
 
 
-def hex_to_rgb01(hex_color: str):
-    """Convert #RRGGBB to RGB values in [0, 1]."""
-    hex_color = hex_color.lstrip("#")
-    return np.array(
-        [int(hex_color[i:i + 2], 16) / 255.0 for i in (0, 2, 4)],
-        dtype=float,
-    )
-
-
-def rgb01_to_hex(rgb):
-    """Convert RGB values in [0, 1] to #RRGGBB."""
-    rgb = np.clip(rgb, 0.0, 1.0)
-    return "#" + "".join(f"{int(round(v * 255)):02x}" for v in rgb)
-
-
-def mix_with_gray(hex_color: str, gray_ratio: float = 0.88, gray_color: str = "#d9d9d9"):
+def desaturate_colormap(base_cmap, gray_ratio: float = 0.95, gray_color=(0.82, 0.82, 0.82)):
     """
-    Desaturate a color by mixing it with gray.
+    Desaturate a colormap by mixing each RGB color with neutral gray.
 
-    Larger gray_ratio means more gray and less saturated color.
-    Recommended range for paper figures: 0.20--0.35.
+    gray_ratio:
+        0.00 -> original colormap
+        0.30 -> mildly desaturated
+        0.45 -> paper-like muted style
+        0.60 -> strongly gray, less distinguishable
     """
-    color_rgb = hex_to_rgb01(hex_color)
-    gray_rgb = hex_to_rgb01(gray_color)
-    mixed_rgb = (1.0 - gray_ratio) * color_rgb + gray_ratio * gray_rgb
-    return rgb01_to_hex(mixed_rgb)
+    colors = base_cmap(np.linspace(0.0, 1.0, 256))
+
+    gray = np.array(gray_color, dtype=float)
+    colors[:, :3] = (1.0 - gray_ratio) * colors[:, :3] + gray_ratio * gray
+
+    return ListedColormap(colors, name=f"{base_cmap.name}_gray{gray_ratio:.2f}")
 
 
 def parse_markdown_table(md_path: Path):
@@ -137,81 +127,32 @@ def parse_markdown_table(md_path: Path):
     return targets, np.asarray(values, dtype=float)
 
 
-def make_average_centered_colormap(data: np.ndarray):
+def make_ylgnbu_colormap(data: np.ndarray):
     """
-    Build a discrete red-white-blue colormap centered at the global average Gini.
+    Build a desaturated sequential yellow-green-blue colormap.
 
-    Below average:
-        light red -> medium red -> dark red
+    Low Gini  -> pale yellow-gray
+    Mid Gini  -> muted green/cyan
+    High Gini -> muted deep blue
 
-    Near average:
-        off-white
-
-    Above average:
-        light blue -> medium blue -> dark blue
-
-    All non-white colors are mixed with gray to reduce saturation and make the
-    figure more suitable for paper publication.
+    This keeps the same semantic direction as YlGnBu, but reduces saturation
+    for a more serious paper-style figure.
     """
     global_avg = float(np.mean(data))
-    data_min = float(np.min(data))
-    data_max = float(np.max(data))
 
-    lower_span = max(global_avg - data_min, 1e-12)
-    upper_span = max(data_max - global_avg, 1e-12)
+    base_cmap = plt.get_cmap("YlGnBu")
 
-    # Values within this absolute distance from the global average are shown as off-white.
-    # Larger value means a wider "near average" band.
-    white_band = 0.06
+    # Increase gray_ratio for a more muted, serious style.
+    # Recommended: 0.30--0.45.
+    cmap = desaturate_colormap(
+        base_cmap,
+        gray_ratio=0.29,
+        gray_color=(0.82, 0.82, 0.82),
+    )
 
-    lower_white = max(data_min, global_avg - white_band)
-    upper_white = min(data_max, global_avg + white_band)
+    norm = Normalize(vmin=0.0, vmax=1.0)
 
-    boundaries = [
-        data_min - 1e-9,
-        global_avg - 2.0 * lower_span / 3.0,
-        global_avg - 1.0 * lower_span / 3.0,
-        lower_white,
-        upper_white,
-        global_avg + 1.0 * upper_span / 3.0,
-        global_avg + 2.0 * upper_span / 3.0,
-        data_max + 1e-9,
-    ]
-
-    # Ensure boundaries are strictly increasing.
-    boundaries = np.asarray(boundaries, dtype=float)
-    boundaries = np.maximum.accumulate(boundaries + np.arange(len(boundaries)) * 1e-10)
-
-    # Base red-white-blue colors.
-    base_colors = [
-        "#8b0000",  # dark red: far below average
-        "#c43c39",  # medium red
-        "#f4a3a3",  # light red
-        "#eeeeee",  # near average / "#ffffff"
-        "#9ecae1",  # light blue
-        "#4292c6",  # medium blue
-        "#084594",  # dark blue: far above average
-    ]
-
-    # Increase this for more gray / less saturation.
-    # Recommended range: 0.20--0.35.
-    gray_ratio = 0.6
-    gray_color = "#d9d9d9"
-
-    colors = [
-        mix_with_gray(base_colors[0], gray_ratio, gray_color),
-        mix_with_gray(base_colors[1], gray_ratio, gray_color),
-        mix_with_gray(base_colors[2], gray_ratio, gray_color),
-        "#eeeeee",  # near average: off-white instead of pure white
-        mix_with_gray(base_colors[4], gray_ratio, gray_color),
-        mix_with_gray(base_colors[5], gray_ratio, gray_color),
-        mix_with_gray(base_colors[6], gray_ratio, gray_color),
-    ]
-
-    cmap = ListedColormap(colors)
-    norm = BoundaryNorm(boundaries, cmap.N)
-
-    return cmap, norm, global_avg, boundaries
+    return cmap, norm, global_avg
 
 
 def plot_heatmap(targets, data, out_svg: Path, out_pdf: Path):
@@ -226,7 +167,7 @@ def plot_heatmap(targets, data, out_svg: Path, out_pdf: Path):
         "ps.fonttype": 42,
     })
 
-    cmap, norm, global_avg, boundaries = make_average_centered_colormap(data)
+    cmap, norm, global_avg = make_ylgnbu_colormap(data)
 
     fig, ax = plt.subplots(figsize=(fig_width, fig_height))
 
@@ -254,55 +195,25 @@ def plot_heatmap(targets, data, out_svg: Path, out_pdf: Path):
     ax.set_xlabel("Static Features", fontsize=14, fontweight="bold", labelpad=8)
     ax.set_ylabel("FuzzBench Targets", fontsize=14, fontweight="bold", labelpad=8)
 
-    # ax.set_title(
-    #     "Gini Coefficients of BB-level Static Features",
-    #     fontsize=16,
-    #     fontweight="bold",
-    #     pad=12,
-    # )
-
-    # Light grid lines between cells.
-    ax.set_xticks(np.arange(-0.5, n_features, 1), minor=True)
-    ax.set_yticks(np.arange(-0.5, n_targets, 1), minor=True)
-    ax.grid(which="minor", color="white", linestyle="-", linewidth=0.7)
-    ax.tick_params(which="minor", bottom=False, left=False)
-
-    # Highlight selected core features.
-    selected_indices = [i for i, f in enumerate(FEATURES) if f in SELECTED_FEATURES]
-    for idx in selected_indices:
-        ax.add_patch(
-            Rectangle(
-                (idx - 0.5, -0.5),
-                1,
-                n_targets,
-                fill=False,
-                edgecolor="black",
-                linewidth=1.4,
-            )
-        )
-
     # Bold selected feature tick labels.
     for tick_label, feature in zip(ax.get_xticklabels(), FEATURES):
         if feature in SELECTED_FEATURES:
             tick_label.set_fontweight("bold")
 
-    # Discrete colorbar.
+    # Sequential colorbar.
     cbar = fig.colorbar(
         im,
         ax=ax,
         fraction=0.035,
         pad=0.02,
-        boundaries=boundaries,
     )
-    # cbar.set_label("Gini coefficient", fontsize=11, fontweight="bold")
-    # cbar.ax.tick_params(labelsize=9)
 
-    # Show min, global average, and max.
-    cbar.set_ticks([data.min(), global_avg, data.max()])
+    # Show min theoretical value, global average, and max theoretical value.
+    cbar.set_ticks([0.0, global_avg, 1.0])
     cbar.set_ticklabels([
-        f"{data.min():.2f}",
+        "0.00",
         f"avg={global_avg:.2f}",
-        f"{data.max():.2f}",
+        "1.00",
     ])
 
     fig.tight_layout()

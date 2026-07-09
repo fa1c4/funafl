@@ -49,6 +49,7 @@ import pandas as pd
 report_data_paths = [
     "../data/merged_report_data.csv",
     "../data/baselines_report_data_alpha.csv",
+    "../data/libafl_report_data.csv",
 ]
 
 ALPHA = 0.05
