@@ -285,7 +285,7 @@ def get_all_ida_strings():
 def get_string_at_address(addr):
     try:
         st = idc.get_str_type(addr)
-        if st != -1:
+        if st is not None and st != -1:
             try:
                 return idc.get_strlit_contents(addr).decode('utf-8', errors='ignore')
             except Exception:
@@ -357,7 +357,7 @@ def is_string_addr(addr, string_addrs):
 
     try:
         st = idc.get_str_type(addr)
-        if st != -1:
+        if st is not None and st != -1:
             return True
     except Exception:
         pass
